@@ -59,8 +59,33 @@ st.markdown("""
         border: 1px solid #3d3d3d;
     }
     
-    /* FIXED: Clickable ticker boxes with proper colors */
-    .ticker-box {
+    .ticker-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 15px;
+    }
+    
+    /* Carousel buttons */
+    .carousel-btn {
+        background-color: #667eea;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 20px;
+        font-weight: bold;
+        transition: all 0.3s;
+    }
+    
+    .carousel-btn:hover {
+        background-color: #764ba2;
+        transform: scale(1.1);
+    }
+    
+    /* Gray ticker boxes - CLICKABLE */
+    .ticker-container {
         background-color: #2d2d2d;
         padding: 15px;
         border-radius: 8px;
@@ -68,11 +93,10 @@ st.markdown("""
         border: 1px solid #3d3d3d;
         cursor: pointer;
         transition: all 0.3s;
-        text-align: center;
-        margin: 5px;
+        flex: 1;
     }
     
-    .ticker-box:hover {
+    .ticker-container:hover {
         background-color: #3d3d3d;
         border-color: #667eea;
         transform: translateY(-3px);
@@ -80,37 +104,32 @@ st.markdown("""
     }
     
     .ticker-symbol {
-        color: #ffffff;
-        font-weight: bold;
-        font-size: 14px;
-        margin-bottom: 8px;
+        color: #ffffff !important;
+        font-weight: bold !important;
+        font-size: 16px !important;
+        margin-bottom: 5px !important;
     }
     
-    .ticker-price {
+    .ticker-price-up {
+        color: #27ae60 !important;
         font-weight: bold;
         font-size: 20px;
-        margin: 5px 0;
     }
     
-    .price-up {
-        color: #27ae60 !important;
-    }
-    
-    .price-down {
+    .ticker-price-down {
         color: #e74c3c !important;
+        font-weight: bold;
+        font-size: 20px;
     }
     
-    .ticker-change {
+    .ticker-change-up {
+        color: #27ae60 !important;
         font-size: 14px;
-        margin-top: 5px;
     }
     
-    .change-up {
-        color: #27ae60 !important;
-    }
-    
-    .change-down {
+    .ticker-change-down {
         color: #e74c3c !important;
+        font-size: 14px;
     }
     
     /* Control price box */
@@ -237,8 +256,8 @@ if 'predictions' not in st.session_state:
     st.session_state.predictions = None
 if 'ticker_start_index' not in st.session_state:
     st.session_state.ticker_start_index = 0
-if 'auto_refresh_enabled' not in st.session_state:
-    st.session_state.auto_refresh_enabled = True
+if 'last_interaction' not in st.session_state:
+    st.session_state.last_interaction = time.time()
 
 @st.cache_data(ttl=1)
 def get_ticker(symbol):
@@ -375,18 +394,13 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# FIXED: Auto-refresh toggle - disable when viewing chart
+# Auto-refresh toggle (compact)
 col1, col2 = st.columns([6, 1])
 with col2:
-    if st.session_state.show_chart:
-        st.session_state.auto_refresh_enabled = False
-        auto_refresh = st.checkbox("Auto (1s)", value=False, disabled=True, help="Disabled while viewing chart")
-    else:
-        auto_refresh = st.checkbox("Auto (1s)", value=st.session_state.auto_refresh_enabled)
-        st.session_state.auto_refresh_enabled = auto_refresh
+    auto_refresh = st.checkbox("Auto (1s)", value=True)
 
 # ============================================
-# TICKER CAROUSEL - FIXED WITH PROPER COLORS
+# TICKER CAROUSEL - ONE ROW WITH < >
 # ============================================
 st.markdown("---")
 
@@ -403,9 +417,10 @@ with nav_col1:
     if st.button("◀", key="prev_btn", help="Previous symbols"):
         if st.session_state.ticker_start_index > 0:
             st.session_state.ticker_start_index -= visible_count
+            st.session_state.last_interaction = time.time()
             st.rerun()
 
-# FIXED: Display tickers with proper color formatting
+# Display tickers
 for idx, col in enumerate(ticker_cols):
     symbol_idx = start_idx + idx
     if symbol_idx < len(SYMBOLS):
@@ -417,27 +432,20 @@ for idx, col in enumerate(ticker_cols):
                 change_pct = ticker_data['change_percent']
                 is_up = change_pct >= 0
                 
-                # Determine color classes
-                price_class = "price-up" if is_up else "price-down"
-                change_class = "change-up" if is_up else "change-down"
+                price_class = "ticker-price-up" if is_up else "ticker-price-down"
+                change_class = "ticker-change-up" if is_up else "ticker-change-down"
                 arrow = "▲" if is_up else "▼"
                 
-                # Create clickable ticker box with proper HTML
-                ticker_html = f"""
-                <div class="ticker-box" onclick="document.getElementById('ticker_btn_{symbol_idx}').click()">
-                    <div class="ticker-symbol">{symbol}</div>
-                    <div class="ticker-price {price_class}">${ticker_data['price']:,.2f}</div>
-                    <div class="ticker-change {change_class}">{arrow} {abs(change_pct):.2f}%</div>
-                </div>
-                """
-                
-                st.markdown(ticker_html, unsafe_allow_html=True)
-                
-                # Hidden button for click handling
-                if st.button("", key=f"ticker_btn_{symbol_idx}", help=f"View {symbol} chart"):
+                # CLICKABLE TICKER with unique key using timestamp
+                button_key = f"ticker_{symbol}_{symbol_idx}_{int(time.time() * 1000)}"
+                if st.button(
+                    f"{symbol}\n${ticker_data['price']:,.2f}\n{arrow} {abs(change_pct):.2f}%",
+                    key=button_key,
+                    use_container_width=True
+                ):
                     st.session_state.show_chart = True
                     st.session_state.chart_symbol = symbol
-                    st.session_state.auto_refresh_enabled = False  # Disable auto-refresh
+                    st.session_state.last_interaction = time.time()
                     st.rerun()
 
 # Next button
@@ -445,10 +453,11 @@ with nav_col2:
     if st.button("▶", key="next_btn", help="Next symbols"):
         if st.session_state.ticker_start_index + visible_count < len(SYMBOLS):
             st.session_state.ticker_start_index += visible_count
+            st.session_state.last_interaction = time.time()
             st.rerun()
 
 # ============================================
-# CANDLESTICK CHART - FIXED PERSISTENCE
+# CANDLESTICK CHART
 # ============================================
 if st.session_state.show_chart:
     st.markdown("---")
@@ -468,15 +477,14 @@ if st.session_state.show_chart:
         )
         if interval != st.session_state.chart_interval:
             st.session_state.chart_interval = interval
-            st.rerun()
+            st.session_state.last_interaction = time.time()
     
     with col3:
         if st.button("❌ Close", type="primary", key="close_chart_btn"):
             st.session_state.show_chart = False
-            st.session_state.auto_refresh_enabled = True  # Re-enable auto-refresh
+            st.session_state.last_interaction = time.time()
             st.rerun()
     
-    # Fetch and display chart
     df = get_klines(st.session_state.chart_symbol, st.session_state.chart_interval, 200)
     
     if df is not None and len(df) > 0:
@@ -553,86 +561,86 @@ if st.session_state.show_chart:
             st.metric("Close", f"${current['close']:.2f}")
     
     st.markdown("---")
-    # IMPORTANT: Don't call st.stop() here to allow rest of UI to render
-    # st.stop()
 
 # ============================================
-# CONTROL PANEL
+# CONTROL PANEL (Only show if chart is not displayed)
 # ============================================
-st.markdown("### 🎛️ Control Panel")
+if not st.session_state.show_chart:
+    st.markdown("### 🎛️ Control Panel")
 
-col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
+    col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
 
-with col1:
-    selected_symbol = st.selectbox("📊 Symbol", SYMBOLS, key="control_symbol_select")
+    with col1:
+        selected_symbol = st.selectbox("📊 Symbol", SYMBOLS, key="control_symbol_select")
 
-with col2:
-    timezone = st.selectbox(
-        "🌍 Timezone",
-        ["Asia/Ho_Chi_Minh", "America/New_York", "Europe/London", "Asia/Tokyo"],
-        index=0,
-        key="timezone_select"
-    )
+    with col2:
+        timezone = st.selectbox(
+            "🌍 Timezone",
+            ["Asia/Ho_Chi_Minh", "America/New_York", "Europe/London", "Asia/Tokyo"],
+            index=0,
+            key="timezone_select"
+        )
 
-with col3:
-    st.write("")
-    st.write("")
-    run_analysis = st.button("🚀 Run Analysis", type="primary", use_container_width=True, key="run_analysis_btn")
+    with col3:
+        st.write("")
+        st.write("")
+        run_analysis = st.button("🚀 Run Analysis", type="primary", use_container_width=True, key="run_analysis_btn")
 
-with col4:
-    current_ticker = get_ticker(selected_symbol)
-    if current_ticker:
-        change_pct = current_ticker['change_percent']
-        is_up = change_pct >= 0
-        price_class = "control-price-up" if is_up else "control-price-down"
-        
-        st.markdown(f"""
-        <div class="control-price-box">
-            <div class="control-symbol">{selected_symbol}</div>
-            <div class="{price_class}">${current_ticker['price']:,.2f}</div>
-            <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">
-                {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
+    with col4:
+        current_ticker = get_ticker(selected_symbol)
+        if current_ticker:
+            change_pct = current_ticker['change_percent']
+            is_up = change_pct >= 0
+            price_class = "control-price-up" if is_up else "control-price-down"
+            
+            st.markdown(f"""
+            <div class="control-price-box">
+                <div class="control-symbol">{selected_symbol}</div>
+                <div class="{price_class}">${current_ticker['price']:,.2f}</div>
+                <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">
+                    {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
+                </div>
             </div>
-        </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
-# ============================================
-# RUN ANALYSIS
-# ============================================
-if run_analysis:
-    with st.spinner(f"🔄 Analyzing {selected_symbol}..."):
-        try:
-            predictor = AdvancedETHPredictor(timezone=timezone)
-            
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            
-            status_text.text("Fetching data...")
-            progress_bar.progress(20)
-            
-            all_data, all_predictions = predictor.run_analysis(selected_symbol)
-            
-            progress_bar.progress(100)
-            status_text.text("✅ Analysis complete!")
-            
-            predictor.all_predictions = all_predictions
-            
-            st.session_state.predictor = predictor
-            st.session_state.predictions = all_predictions
-            
-            time.sleep(1)
-            progress_bar.empty()
-            status_text.empty()
-            
-            st.success(f"✅ Analysis completed for {selected_symbol}!")
-            
-        except Exception as e:
-            st.error(f"❌ Error: {str(e)}")
+    # ============================================
+    # RUN ANALYSIS
+    # ============================================
+    if run_analysis:
+        with st.spinner(f"🔄 Analyzing {selected_symbol}..."):
+            try:
+                predictor = AdvancedETHPredictor(timezone=timezone)
+                
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                status_text.text("Fetching data...")
+                progress_bar.progress(20)
+                
+                all_data, all_predictions = predictor.run_analysis(selected_symbol)
+                
+                progress_bar.progress(100)
+                status_text.text("✅ Analysis complete!")
+                
+                predictor.all_predictions = all_predictions
+                
+                st.session_state.predictor = predictor
+                st.session_state.predictions = all_predictions
+                st.session_state.last_interaction = time.time()
+                
+                time.sleep(1)
+                progress_bar.empty()
+                status_text.empty()
+                
+                st.success(f"✅ Analysis completed for {selected_symbol}!")
+                
+            except Exception as e:
+                st.error(f"❌ Error: {str(e)}")
 
 # ============================================
 # RESULTS DISPLAY
 # ============================================
-if st.session_state.predictor is not None and st.session_state.predictions is not None:
+if st.session_state.predictor is not None and st.session_state.predictions is not None and not st.session_state.show_chart:
     predictor = st.session_state.predictor
     all_predictions = st.session_state.predictions
     
@@ -962,11 +970,17 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
             })
 
 # ============================================
-# AUTO-REFRESH - ONLY WHEN NOT VIEWING CHART
+# AUTO-REFRESH (with cooldown after interactions)
 # ============================================
-if auto_refresh and not st.session_state.show_chart:
-    time.sleep(1)
-    st.rerun()
+if auto_refresh:
+    # Only auto-refresh if no recent interaction (2 seconds cooldown)
+    time_since_interaction = time.time() - st.session_state.last_interaction
+    if time_since_interaction > 2:
+        time.sleep(1)
+        st.rerun()
+    else:
+        # Wait a bit longer after interaction
+        time.sleep(0.5)
 
 # Footer
 st.markdown("---")
