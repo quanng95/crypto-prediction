@@ -54,12 +54,12 @@ st.markdown("""
         opacity: 0.9;
     }
     
-    /* Control price box */
+    /* Control price box - CÂN BẰNG */
     .control-price-box {
         background-color: #2d2d2d;
         padding: 10px;
         border-radius: 5px;
-        margin-top: 25px;
+        margin-top: 0px;
         border: 1px solid #3d3d3d;
     }
     
@@ -123,8 +123,38 @@ st.markdown("""
         font-size: 28px !important;
     }
     
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
+    /* ẨN RUNNING INDICATOR - QUAN TRỌNG */
+    [data-testid="stStatusWidget"] {
+        visibility: hidden;
+        height: 0px;
+        position: fixed;
+    }
+    
+    /* ẨN HEADER STREAMLIT */
+    header[data-testid="stHeader"] {
+        display: none;
+    }
+    
+    /* ẨN TOOLBAR */
+    [data-testid="stToolbar"] {
+        display: none;
+    }
+    
+    /* ẨN FOOTER */
+    footer {
+        visibility: hidden;
+        height: 0px;
+    }
+    
+    /* ẨN MENU */
+    #MainMenu {
+        visibility: hidden;
+    }
+    
+    /* ẨN DEPLOY BUTTON */
+    .stDeployButton {
+        display: none;
+    }
     
     [data-testid="stMetricValue"] {
         font-size: 22px;
@@ -448,8 +478,8 @@ with col2:
         st.rerun()
 
 with col3:
-    st.write("")
-    st.write("")
+    st.write("")  # Spacing line 1
+    st.write("")  # Spacing line 2
     if st.button(
         "🚀 Run Analysis", 
         type="primary", 
@@ -460,6 +490,7 @@ with col3:
         st.rerun()
 
 with col4:
+    st.write("")  # Spacing line 1 (để cân với label của col1, col2)
     realtime_price_display()
 
 # ============================================
