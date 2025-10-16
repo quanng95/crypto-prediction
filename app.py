@@ -259,9 +259,9 @@ if 'ticker_start_index' not in st.session_state:
 if 'last_ticker_refresh' not in st.session_state:
     st.session_state.last_ticker_refresh = time.time()
 
-@st.cache_data(ttl=1)
+# KHÔNG CACHE - Để luôn lấy data mới
 def get_ticker(symbol):
-    """Get ticker from Binance"""
+    """Get ticker from Binance - NO CACHE"""
     try:
         url = f"https://api.binance.com/api/v3/ticker/24hr"
         response = requests.get(url, params={'symbol': symbol}, timeout=5)
@@ -435,7 +435,7 @@ for idx, col in enumerate(ticker_cols):
                 change_class = "ticker-change-up" if is_up else "ticker-change-down"
                 arrow = "▲" if is_up else "▼"
                 
-                # CLICKABLE TICKER - No button, click on box
+                # CLICKABLE TICKER
                 if st.button(
                     f"{symbol}\n${ticker_data['price']:,.2f}\n{arrow} {abs(change_pct):.2f}%",
                     key=f"ticker_{symbol}_{symbol_idx}",
@@ -453,14 +453,16 @@ with nav_col2:
             st.rerun()
 
 # ============================================
-# AUTO-REFRESH LOGIC FOR TICKER ONLY
+# AUTO-REFRESH LOGIC - LUÔN RERUN NẾU AUTO BẬT
 # ============================================
-# Đặt TRƯỚC phần hiển thị chart và kết quả
-if ticker_auto_refresh and time.time() - st.session_state.last_ticker_refresh > 1:
-    st.session_state.last_ticker_refresh = time.time()
-    # Chỉ rerun nếu KHÔNG đang xem chart hoặc kết quả
-    if not st.session_state.show_chart and st.session_state.predictor is None:
-        st.rerun()
+if ticker_auto_refresh:
+    current_time = time.time()
+    if current_time - st.session_state.last_ticker_refresh >= 1:
+        st.session_state.last_ticker_refresh = current_time
+        # CHỈ RERUN KHI ĐANG Ở TRANG CHỦ (không xem chart, không có results)
+        if not st.session_state.show_chart and st.session_state.predictor is None:
+            time.sleep(1)
+            st.rerun()
 
 # ============================================
 # CANDLESTICK CHART
@@ -564,12 +566,6 @@ if st.session_state.show_chart:
             st.metric("Close", f"${current['close']:.2f}")
     
     st.markdown("---")
-    
-    # Cho phép ticker tiếp tục refresh khi xem chart
-    if ticker_auto_refresh:
-        time.sleep(1)
-        st.rerun()
-    
     st.stop()
 
 # ============================================
@@ -975,11 +971,6 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                 'displayModeBar': True,
                 'displaylogo': False
             })
-    
-    # CHO PHÉP TICKER TIẾP TỤC REFRESH KHI XEM KẾT QUẢ
-    if ticker_auto_refresh:
-        time.sleep(1)
-        st.rerun()
 
 # Footer
 st.markdown("---")
