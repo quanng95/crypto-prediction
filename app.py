@@ -256,12 +256,10 @@ if 'predictions' not in st.session_state:
     st.session_state.predictions = None
 if 'ticker_start_index' not in st.session_state:
     st.session_state.ticker_start_index = 0
-if 'last_ticker_refresh' not in st.session_state:
-    st.session_state.last_ticker_refresh = time.time()
 
-# KHÔNG CACHE - Để luôn lấy data mới
+@st.cache_data(ttl=1)
 def get_ticker(symbol):
-    """Get ticker from Binance - NO CACHE"""
+    """Get ticker from Binance"""
     try:
         url = f"https://api.binance.com/api/v3/ticker/24hr"
         response = requests.get(url, params={'symbol': symbol}, timeout=5)
@@ -394,10 +392,10 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Auto-refresh toggle for ticker (compact)
+# Auto-refresh toggle (compact)
 col1, col2 = st.columns([6, 1])
 with col2:
-    ticker_auto_refresh = st.checkbox("Auto (1s)", value=True, key="ticker_refresh")
+    auto_refresh = st.checkbox("Auto (1s)", value=True)
 
 # ============================================
 # TICKER CAROUSEL - ONE ROW WITH < >
@@ -435,7 +433,7 @@ for idx, col in enumerate(ticker_cols):
                 change_class = "ticker-change-up" if is_up else "ticker-change-down"
                 arrow = "▲" if is_up else "▼"
                 
-                # CLICKABLE TICKER
+                # CLICKABLE TICKER - No button, click on box
                 if st.button(
                     f"{symbol}\n${ticker_data['price']:,.2f}\n{arrow} {abs(change_pct):.2f}%",
                     key=f"ticker_{symbol}_{symbol_idx}",
@@ -450,18 +448,6 @@ with nav_col2:
     if st.button("▶", key="next_btn", help="Next symbols"):
         if st.session_state.ticker_start_index + visible_count < len(SYMBOLS):
             st.session_state.ticker_start_index += visible_count
-            st.rerun()
-
-# ============================================
-# AUTO-REFRESH LOGIC - LUÔN RERUN NẾU AUTO BẬT
-# ============================================
-if ticker_auto_refresh:
-    current_time = time.time()
-    if current_time - st.session_state.last_ticker_refresh >= 1:
-        st.session_state.last_ticker_refresh = current_time
-        # CHỈ RERUN KHI ĐANG Ở TRANG CHỦ (không xem chart, không có results)
-        if not st.session_state.show_chart and st.session_state.predictor is None:
-            time.sleep(1)
             st.rerun()
 
 # ============================================
@@ -641,7 +627,7 @@ if run_analysis:
             st.error(f"❌ Error: {str(e)}")
 
 # ============================================
-# RESULTS DISPLAY
+# RESULTS DISPLAY (Same as before)
 # ============================================
 if st.session_state.predictor is not None and st.session_state.predictions is not None:
     predictor = st.session_state.predictor
@@ -662,6 +648,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
         "🔮 Final Predictions"
     ])
     
+    # [REST OF THE TABS CODE REMAINS THE SAME AS PREVIOUS VERSION]
     # TAB 1: Trading Signals
     with tab1:
         st.markdown("### 🎯 Trading Signals & Recommendations")
@@ -733,7 +720,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                 
                 st.markdown("---")
     
-    # TAB 2: SUMMARY
+    # TAB 2: SUMMARY (existing code)
     with tab2:
         st.markdown("### 🏆 Best Models Performance")
         
@@ -814,7 +801,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
         fig.update_layout(height=800, showlegend=False, template='plotly_dark')
         st.plotly_chart(fig, use_container_width=True)
     
-    # TAB 3-5: TIMEFRAME PREDICTIONS
+    # TAB 3-5: TIMEFRAME PREDICTIONS (existing code with pan enabled)
     for tab, timeframe in zip([tab3, tab4, tab5], ['4h', '1d', '1w']):
         with tab:
             if timeframe not in all_predictions:
@@ -877,7 +864,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                     yaxis_title="Price ($)",
                     template='plotly_dark',
                     height=500,
-                    dragmode='pan'
+                    dragmode='pan'  # LEFT CLICK + DRAG = PAN
                 )
                 
                 fig.update_xaxes(fixedrange=False)
@@ -889,7 +876,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                     'displaylogo': False
                 })
     
-    # TAB 6: FINAL PREDICTIONS
+    # TAB 6: FINAL PREDICTIONS (existing code with pan enabled)
     with tab6:
         st.markdown("### 🎯 Final Predictions Summary")
         
@@ -960,7 +947,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                 yaxis_title="Price ($)",
                 template='plotly_dark',
                 height=600,
-                dragmode='pan'
+                dragmode='pan'  # LEFT CLICK + DRAG = PAN
             )
             
             fig.update_xaxes(fixedrange=False)
@@ -971,6 +958,15 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                 'displayModeBar': True,
                 'displaylogo': False
             })
+    
+    st.stop()
+
+# ============================================
+# AUTO-REFRESH
+# ============================================
+if auto_refresh:
+    time.sleep(1)
+    st.rerun()
 
 # Footer
 st.markdown("---")
