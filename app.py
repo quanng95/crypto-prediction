@@ -3,8 +3,8 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import time
-from datetime import datetime
 import requests
+from datetime import datetime
 
 # Import predictor
 from eth import AdvancedETHPredictor
@@ -13,55 +13,107 @@ from eth import AdvancedETHPredictor
 st.set_page_config(
     page_title="🔮 Crypto Prediction",
     page_icon="🔮",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-# Custom CSS
+# Custom CSS - FIXED COLORS
 st.markdown("""
 <style>
-    .main {
-        background-color: #f5f6fa;
+    .main { 
+        background-color: #f5f6fa; 
     }
-    .stMetric {
+    
+    /* Ticker styling */
+    .ticker-container {
         background-color: white;
         padding: 15px;
         border-radius: 8px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 10px;
     }
-    .ticker-positive {
-        color: #27ae60;
+    
+    .ticker-symbol {
+        color: #000000 !important;
+        font-weight: bold;
+        font-size: 14px;
+        margin-bottom: 5px;
+    }
+    
+    .ticker-price-up {
+        color: #27ae60 !important;
+        font-weight: bold;
+        font-size: 18px;
+    }
+    
+    .ticker-price-down {
+        color: #e74c3c !important;
+        font-weight: bold;
+        font-size: 18px;
+    }
+    
+    .ticker-change-up {
+        color: #27ae60 !important;
+        font-size: 12px;
+    }
+    
+    .ticker-change-down {
+        color: #e74c3c !important;
+        font-size: 12px;
+    }
+    
+    /* Control panel styling */
+    .control-symbol {
+        color: #000000 !important;
         font-weight: bold;
     }
-    .ticker-negative {
-        color: #e74c3c;
+    
+    .control-price-up {
+        color: #27ae60 !important;
         font-weight: bold;
+        font-size: 24px;
+    }
+    
+    .control-price-down {
+        color: #e74c3c !important;
+        font-weight: bold;
+        font-size: 24px;
+    }
+    
+    /* Hide Streamlit branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    
+    /* Metric styling */
+    [data-testid="stMetricValue"] {
+        font-size: 20px;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state
+# Symbols
+SYMBOLS = ["ETHUSDT", "BTCUSDT", "BNBUSDT", "SOLUSDT", "ADAUSDT", "DOGEUSDT", "ARBUSDT", "PAXGUSDT"]
+
+# Session state
+if 'last_update' not in st.session_state:
+    st.session_state.last_update = time.time()
 if 'predictor' not in st.session_state:
     st.session_state.predictor = None
 if 'predictions' not in st.session_state:
     st.session_state.predictions = None
-if 'last_update' not in st.session_state:
-    st.session_state.last_update = time.time()
+if 'show_chart' not in st.session_state:
+    st.session_state.show_chart = False
+if 'chart_symbol' not in st.session_state:
+    st.session_state.chart_symbol = "ETHUSDT"
 
-# Symbols
-SYMBOLS = ["ETHUSDT", "BTCUSDT", "PAXGUSDT", "BNBUSDT", 
-           "SOLUSDT", "ADAUSDT", "DOGEUSDT", "ARBUSDT"]
-
-
-def get_binance_ticker(symbol):
-    """Lấy ticker data từ Binance"""
+@st.cache_data(ttl=2)  # Cache 2 seconds for real-time updates
+def get_ticker(symbol):
+    """Get ticker from Binance"""
     try:
         url = f"https://api.binance.com/api/v3/ticker/24hr"
         response = requests.get(url, params={'symbol': symbol}, timeout=5)
         data = response.json()
         return {
             'price': float(data['lastPrice']),
-            'change': float(data['priceChange']),
             'change_percent': float(data['priceChangePercent']),
             'high': float(data['highPrice']),
             'low': float(data['lowPrice']),
@@ -70,65 +122,192 @@ def get_binance_ticker(symbol):
     except:
         return None
 
+@st.cache_data(ttl=60)  # Cache 1 minute
+def get_klines(symbol, interval='1h', limit=200):
+    """Get candlestick data"""
+    try:
+        url = f"https://api.binance.com/api/v3/klines"
+        response = requests.get(url, params={
+            'symbol': symbol,
+            'interval': interval,
+            'limit': limit
+        }, timeout=10)
+        data = response.json()
+        
+        df = pd.DataFrame(data, columns=[
+            'timestamp', 'open', 'high', 'low', 'close', 'volume',
+            'close_time', 'quote_volume', 'trades', 'taker_buy_base',
+            'taker_buy_quote', 'ignore'
+        ])
+        
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        for col in ['open', 'high', 'low', 'close', 'volume']:
+            df[col] = df[col].astype(float)
+        
+        return df
+    except Exception as e:
+        st.error(f"Error: {e}")
+        return None
 
-def format_volume(volume):
-    """Format volume"""
-    if volume >= 1_000_000:
-        return f"{volume/1_000_000:.2f}M"
-    elif volume >= 1_000:
-        return f"{volume/1_000:.2f}K"
-    return f"{volume:.0f}"
-
+def show_candlestick_chart(symbol, interval='1h'):
+    """Show candlestick chart in modal"""
+    st.session_state.show_chart = True
+    st.session_state.chart_symbol = symbol
 
 # ============================================
 # HEADER
 # ============================================
 st.title("🔮 Crypto Prediction - Real-time")
 
-# Connection status
-col1, col2, col3 = st.columns([3, 1, 1])
+# Auto-refresh toggle
+col1, col2 = st.columns([5, 1])
 with col1:
     st.markdown("### Real-time Market Data")
 with col2:
-    if st.button("🔄 Refresh Now"):
-        st.rerun()
-with col3:
-    auto_refresh = st.checkbox("Auto-refresh (5s)", value=True)
+    auto_refresh = st.checkbox("Auto-refresh (2s)", value=True)
 
 # ============================================
-# TICKER BAR
+# TICKER BAR - FIXED COLORS
 # ============================================
 st.markdown("---")
-ticker_cols = st.columns(len(SYMBOLS))
 
-for idx, symbol in enumerate(SYMBOLS):
-    with ticker_cols[idx]:
-        ticker_data = get_binance_ticker(symbol)
-        if ticker_data:
-            change_pct = ticker_data['change_percent']
-            color_class = "ticker-positive" if change_pct >= 0 else "ticker-negative"
-            arrow = "▲" if change_pct >= 0 else "▼"
-            
-            st.metric(
-                label=symbol,
-                value=f"${ticker_data['price']:,.2f}",
-                delta=f"{arrow} {abs(change_pct):.2f}%"
-            )
+# Create 4 rows of 2 symbols each
+for row in range(0, len(SYMBOLS), 4):
+    ticker_cols = st.columns(4)
+    
+    for idx, symbol in enumerate(SYMBOLS[row:row+4]):
+        with ticker_cols[idx]:
+            ticker_data = get_ticker(symbol)
+            if ticker_data:
+                change_pct = ticker_data['change_percent']
+                is_up = change_pct >= 0
+                
+                # Color classes
+                price_class = "ticker-price-up" if is_up else "ticker-price-down"
+                change_class = "ticker-change-up" if is_up else "ticker-change-down"
+                arrow = "▲" if is_up else "▼"
+                
+                # HTML with proper colors
+                html = f"""
+                <div class="ticker-container" style="cursor: pointer;" onclick="alert('Click Show Chart button to view')">
+                    <div class="ticker-symbol">{symbol}</div>
+                    <div class="{price_class}">${ticker_data['price']:,.2f}</div>
+                    <div class="{change_class}">{arrow} {abs(change_pct):.2f}%</div>
+                </div>
+                """
+                st.markdown(html, unsafe_allow_html=True)
+                
+                # Add button to show chart
+                if st.button(f"📊 Chart", key=f"chart_{symbol}"):
+                    st.session_state.show_chart = True
+                    st.session_state.chart_symbol = symbol
 
 # ============================================
-# CONTROL PANEL
+# CANDLESTICK CHART MODAL
 # ============================================
-st.markdown("---")
+if st.session_state.show_chart:
+    st.markdown("---")
+    
+    col1, col2, col3 = st.columns([2, 2, 1])
+    
+    with col1:
+        st.markdown(f"### 📈 {st.session_state.chart_symbol} Candlestick Chart")
+    
+    with col2:
+        chart_interval = st.selectbox(
+            "Timeframe",
+            ['15m', '1h', '4h', '1d'],
+            index=1,
+            key="chart_interval"
+        )
+    
+    with col3:
+        if st.button("❌ Close Chart"):
+            st.session_state.show_chart = False
+            st.rerun()
+    
+    # Fetch and display chart
+    df = get_klines(st.session_state.chart_symbol, chart_interval, 200)
+    
+    if df is not None and len(df) > 0:
+        # Create candlestick chart
+        fig = make_subplots(
+            rows=2, cols=1,
+            shared_xaxes=True,
+            vertical_spacing=0.03,
+            row_heights=[0.7, 0.3],
+            subplot_titles=(f'{st.session_state.chart_symbol} - {chart_interval.upper()}', 'Volume')
+        )
+        
+        # Candlestick
+        fig.add_trace(
+            go.Candlestick(
+                x=df['timestamp'],
+                open=df['open'],
+                high=df['high'],
+                low=df['low'],
+                close=df['close'],
+                name='Price',
+                increasing_line_color='#26a69a',
+                decreasing_line_color='#ef5350'
+            ),
+            row=1, col=1
+        )
+        
+        # Volume
+        colors = ['#26a69a' if row['close'] >= row['open'] else '#ef5350' 
+                 for _, row in df.iterrows()]
+        
+        fig.add_trace(
+            go.Bar(
+                x=df['timestamp'],
+                y=df['volume'],
+                name='Volume',
+                marker_color=colors,
+                opacity=0.6
+            ),
+            row=2, col=1
+        )
+        
+        # Layout
+        fig.update_layout(
+            height=700,
+            template='plotly_dark',
+            xaxis_rangeslider_visible=False,
+            showlegend=False,
+            hovermode='x unified'
+        )
+        
+        fig.update_xaxes(title_text="Time", row=2, col=1)
+        fig.update_yaxes(title_text="Price ($)", row=1, col=1)
+        fig.update_yaxes(title_text="Volume", row=2, col=1)
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Current stats
+        current = df.iloc[-1]
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Open", f"${current['open']:.2f}")
+        with col2:
+            st.metric("High", f"${current['high']:.2f}")
+        with col3:
+            st.metric("Low", f"${current['low']:.2f}")
+        with col4:
+            st.metric("Close", f"${current['close']:.2f}")
+    
+    st.markdown("---")
+
+# ============================================
+# CONTROL PANEL - FIXED COLORS
+# ============================================
 st.markdown("### 🎛️ Control Panel")
 
 col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
 
 with col1:
-    selected_symbol = st.selectbox(
-        "📊 Symbol",
-        SYMBOLS,
-        index=0
-    )
+    selected_symbol = st.selectbox("📊 Symbol", SYMBOLS, key="analysis_symbol")
 
 with col2:
     timezone = st.selectbox(
@@ -138,19 +317,27 @@ with col2:
     )
 
 with col3:
-    st.write("")  # Spacing
     st.write("")
-    run_analysis = st.button("🚀 Run Analysis", use_container_width=True, type="primary")
+    st.write("")
+    run_analysis = st.button("🚀 Run Analysis", type="primary", use_container_width=True)
 
 with col4:
-    # Current price display
-    current_ticker = get_binance_ticker(selected_symbol)
+    # Current price display with proper colors
+    current_ticker = get_ticker(selected_symbol)
     if current_ticker:
-        st.metric(
-            label="Current Price",
-            value=f"${current_ticker['price']:,.2f}",
-            delta=f"{current_ticker['change_percent']:+.2f}%"
-        )
+        change_pct = current_ticker['change_percent']
+        is_up = change_pct >= 0
+        price_class = "control-price-up" if is_up else "control-price-down"
+        
+        st.markdown(f"""
+        <div style="background: white; padding: 10px; border-radius: 5px; margin-top: 25px;">
+            <div class="control-symbol">{selected_symbol}</div>
+            <div class="{price_class}">${current_ticker['price']:,.2f}</div>
+            <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 12px;">
+                {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 # ============================================
 # RUN ANALYSIS
@@ -188,7 +375,7 @@ if run_analysis:
             st.error(f"❌ Error: {str(e)}")
 
 # ============================================
-# RESULTS DISPLAY
+# RESULTS DISPLAY - FIXED DUPLICATE
 # ============================================
 if st.session_state.predictor and st.session_state.predictions:
     predictor = st.session_state.predictor
@@ -197,7 +384,7 @@ if st.session_state.predictor and st.session_state.predictions:
     st.markdown("---")
     st.markdown("## 📊 Analysis Results")
     
-    # Tabs
+    # Single set of tabs (not duplicate)
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📈 Summary",
         "⏰ 4H Predictions",
@@ -334,8 +521,7 @@ if st.session_state.predictor and st.session_state.predictions:
                 # Chart
                 fig = go.Figure()
                 
-                prices = [p['Predicted Price'].replace('$', '') for p in pred_data]
-                prices = [float(p) for p in prices]
+                prices = [float(p['Predicted Price'].replace('$', '')) for p in pred_data]
                 periods = [p['Period'] for p in pred_data]
                 
                 fig.add_trace(go.Scatter(
@@ -444,17 +630,18 @@ if st.session_state.predictor and st.session_state.predictions:
             st.plotly_chart(fig, use_container_width=True)
 
 # ============================================
-# AUTO-REFRESH
+# AUTO-REFRESH (2 seconds)
 # ============================================
 if auto_refresh:
-    time.sleep(5)
+    time.sleep(2)
     st.rerun()
 
 # Footer
 st.markdown("---")
 st.markdown(
     "<div style='text-align: center; color: #7f8c8d;'>"
-    "🔮 Crypto Prediction App | Powered by Streamlit"
+    f"🔮 Crypto Prediction | Last update: {datetime.now().strftime('%H:%M:%S')} | "
+    "Powered by Streamlit & Binance API"
     "</div>",
     unsafe_allow_html=True
 )
