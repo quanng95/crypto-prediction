@@ -256,8 +256,6 @@ if 'predictions' not in st.session_state:
     st.session_state.predictions = None
 if 'ticker_start_index' not in st.session_state:
     st.session_state.ticker_start_index = 0
-if 'last_interaction' not in st.session_state:
-    st.session_state.last_interaction = time.time()
 
 @st.cache_data(ttl=1)
 def get_ticker(symbol):
@@ -417,7 +415,6 @@ with nav_col1:
     if st.button("◀", key="prev_btn", help="Previous symbols"):
         if st.session_state.ticker_start_index > 0:
             st.session_state.ticker_start_index -= visible_count
-            st.session_state.last_interaction = time.time()
             st.rerun()
 
 # Display tickers
@@ -436,16 +433,14 @@ for idx, col in enumerate(ticker_cols):
                 change_class = "ticker-change-up" if is_up else "ticker-change-down"
                 arrow = "▲" if is_up else "▼"
                 
-                # CLICKABLE TICKER with unique key using timestamp
-                button_key = f"ticker_{symbol}_{symbol_idx}_{int(time.time() * 1000)}"
+                # CLICKABLE TICKER - No button, click on box
                 if st.button(
                     f"{symbol}\n${ticker_data['price']:,.2f}\n{arrow} {abs(change_pct):.2f}%",
-                    key=button_key,
+                    key=f"ticker_{symbol}_{symbol_idx}",
                     use_container_width=True
                 ):
                     st.session_state.show_chart = True
                     st.session_state.chart_symbol = symbol
-                    st.session_state.last_interaction = time.time()
                     st.rerun()
 
 # Next button
@@ -453,7 +448,6 @@ with nav_col2:
     if st.button("▶", key="next_btn", help="Next symbols"):
         if st.session_state.ticker_start_index + visible_count < len(SYMBOLS):
             st.session_state.ticker_start_index += visible_count
-            st.session_state.last_interaction = time.time()
             st.rerun()
 
 # ============================================
@@ -472,17 +466,14 @@ if st.session_state.show_chart:
         interval = st.selectbox(
             "Timeframe",
             ['15m', '1h', '4h', '1d'],
-            index=['15m', '1h', '4h', '1d'].index(st.session_state.chart_interval),
-            key="chart_interval_select"
+            index=['15m', '1h', '4h', '1d'].index(st.session_state.chart_interval)
         )
         if interval != st.session_state.chart_interval:
             st.session_state.chart_interval = interval
-            st.session_state.last_interaction = time.time()
     
     with col3:
-        if st.button("❌ Close", type="primary", key="close_chart_btn"):
+        if st.button("❌ Close", type="primary"):
             st.session_state.show_chart = False
-            st.session_state.last_interaction = time.time()
             st.rerun()
     
     df = get_klines(st.session_state.chart_symbol, st.session_state.chart_interval, 200)
@@ -561,86 +552,84 @@ if st.session_state.show_chart:
             st.metric("Close", f"${current['close']:.2f}")
     
     st.markdown("---")
+    st.stop()
 
 # ============================================
-# CONTROL PANEL (Only show if chart is not displayed)
+# CONTROL PANEL
 # ============================================
-if not st.session_state.show_chart:
-    st.markdown("### 🎛️ Control Panel")
+st.markdown("### 🎛️ Control Panel")
 
-    col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
+col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
 
-    with col1:
-        selected_symbol = st.selectbox("📊 Symbol", SYMBOLS, key="control_symbol_select")
+with col1:
+    selected_symbol = st.selectbox("📊 Symbol", SYMBOLS)
 
-    with col2:
-        timezone = st.selectbox(
-            "🌍 Timezone",
-            ["Asia/Ho_Chi_Minh", "America/New_York", "Europe/London", "Asia/Tokyo"],
-            index=0,
-            key="timezone_select"
-        )
+with col2:
+    timezone = st.selectbox(
+        "🌍 Timezone",
+        ["Asia/Ho_Chi_Minh", "America/New_York", "Europe/London", "Asia/Tokyo"],
+        index=0
+    )
 
-    with col3:
-        st.write("")
-        st.write("")
-        run_analysis = st.button("🚀 Run Analysis", type="primary", use_container_width=True, key="run_analysis_btn")
+with col3:
+    st.write("")
+    st.write("")
+    run_analysis = st.button("🚀 Run Analysis", type="primary", use_container_width=True)
 
-    with col4:
-        current_ticker = get_ticker(selected_symbol)
-        if current_ticker:
-            change_pct = current_ticker['change_percent']
-            is_up = change_pct >= 0
-            price_class = "control-price-up" if is_up else "control-price-down"
-            
-            st.markdown(f"""
-            <div class="control-price-box">
-                <div class="control-symbol">{selected_symbol}</div>
-                <div class="{price_class}">${current_ticker['price']:,.2f}</div>
-                <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">
-                    {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
-                </div>
+with col4:
+    current_ticker = get_ticker(selected_symbol)
+    if current_ticker:
+        change_pct = current_ticker['change_percent']
+        is_up = change_pct >= 0
+        price_class = "control-price-up" if is_up else "control-price-down"
+        
+        st.markdown(f"""
+        <div class="control-price-box">
+            <div class="control-symbol">{selected_symbol}</div>
+            <div class="{price_class}">${current_ticker['price']:,.2f}</div>
+            <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">
+                {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
             </div>
-            """, unsafe_allow_html=True)
-
-    # ============================================
-    # RUN ANALYSIS
-    # ============================================
-    if run_analysis:
-        with st.spinner(f"🔄 Analyzing {selected_symbol}..."):
-            try:
-                predictor = AdvancedETHPredictor(timezone=timezone)
-                
-                progress_bar = st.progress(0)
-                status_text = st.empty()
-                
-                status_text.text("Fetching data...")
-                progress_bar.progress(20)
-                
-                all_data, all_predictions = predictor.run_analysis(selected_symbol)
-                
-                progress_bar.progress(100)
-                status_text.text("✅ Analysis complete!")
-                
-                predictor.all_predictions = all_predictions
-                
-                st.session_state.predictor = predictor
-                st.session_state.predictions = all_predictions
-                st.session_state.last_interaction = time.time()
-                
-                time.sleep(1)
-                progress_bar.empty()
-                status_text.empty()
-                
-                st.success(f"✅ Analysis completed for {selected_symbol}!")
-                
-            except Exception as e:
-                st.error(f"❌ Error: {str(e)}")
+        </div>
+        """, unsafe_allow_html=True)
 
 # ============================================
-# RESULTS DISPLAY
+# RUN ANALYSIS
 # ============================================
-if st.session_state.predictor is not None and st.session_state.predictions is not None and not st.session_state.show_chart:
+if run_analysis:
+    with st.spinner(f"🔄 Analyzing {selected_symbol}..."):
+        try:
+            predictor = AdvancedETHPredictor(timezone=timezone)
+            
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            status_text.text("Fetching data...")
+            progress_bar.progress(20)
+            
+            all_data, all_predictions = predictor.run_analysis(selected_symbol)
+            
+            progress_bar.progress(100)
+            status_text.text("✅ Analysis complete!")
+            
+            predictor.all_predictions = all_predictions
+            
+            st.session_state.predictor = predictor
+            st.session_state.predictions = all_predictions
+            
+            time.sleep(1)
+            progress_bar.empty()
+            status_text.empty()
+            
+            st.success(f"✅ Analysis completed for {selected_symbol}!")
+            
+        except Exception as e:
+            st.error(f"❌ Error: {str(e)}")
+
+# ============================================
+# RESULTS DISPLAY (Same as before)
+# ============================================
+if st.session_state.predictor is not None and st.session_state.predictions is not None:
     predictor = st.session_state.predictor
     all_predictions = st.session_state.predictions
     
@@ -659,6 +648,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
         "🔮 Final Predictions"
     ])
     
+    # [REST OF THE TABS CODE REMAINS THE SAME AS PREVIOUS VERSION]
     # TAB 1: Trading Signals
     with tab1:
         st.markdown("### 🎯 Trading Signals & Recommendations")
@@ -730,7 +720,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                 
                 st.markdown("---")
     
-    # TAB 2: SUMMARY
+    # TAB 2: SUMMARY (existing code)
     with tab2:
         st.markdown("### 🏆 Best Models Performance")
         
@@ -811,7 +801,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
         fig.update_layout(height=800, showlegend=False, template='plotly_dark')
         st.plotly_chart(fig, use_container_width=True)
     
-    # TAB 3-5: TIMEFRAME PREDICTIONS
+    # TAB 3-5: TIMEFRAME PREDICTIONS (existing code with pan enabled)
     for tab, timeframe in zip([tab3, tab4, tab5], ['4h', '1d', '1w']):
         with tab:
             if timeframe not in all_predictions:
@@ -874,7 +864,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                     yaxis_title="Price ($)",
                     template='plotly_dark',
                     height=500,
-                    dragmode='pan'
+                    dragmode='pan'  # LEFT CLICK + DRAG = PAN
                 )
                 
                 fig.update_xaxes(fixedrange=False)
@@ -886,7 +876,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                     'displaylogo': False
                 })
     
-    # TAB 6: FINAL PREDICTIONS
+    # TAB 6: FINAL PREDICTIONS (existing code with pan enabled)
     with tab6:
         st.markdown("### 🎯 Final Predictions Summary")
         
@@ -957,7 +947,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                 yaxis_title="Price ($)",
                 template='plotly_dark',
                 height=600,
-                dragmode='pan'
+                dragmode='pan'  # LEFT CLICK + DRAG = PAN
             )
             
             fig.update_xaxes(fixedrange=False)
@@ -968,19 +958,15 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                 'displayModeBar': True,
                 'displaylogo': False
             })
+    
+    st.stop()
 
 # ============================================
-# AUTO-REFRESH (with cooldown after interactions)
+# AUTO-REFRESH
 # ============================================
 if auto_refresh:
-    # Only auto-refresh if no recent interaction (2 seconds cooldown)
-    time_since_interaction = time.time() - st.session_state.last_interaction
-    if time_since_interaction > 2:
-        time.sleep(1)
-        st.rerun()
-    else:
-        # Wait a bit longer after interaction
-        time.sleep(0.5)
+    time.sleep(1)
+    st.rerun()
 
 # Footer
 st.markdown("---")
