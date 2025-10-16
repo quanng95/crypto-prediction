@@ -478,8 +478,8 @@ with col2:
         st.rerun()
 
 with col3:
-    # Thêm label giống col1, col2 để căn chỉnh
-    st.markdown('<p style="color: transparent; margin-bottom: 8px;">.</p>', unsafe_allow_html=True)
+    st.write("")  # Spacing line 1
+    st.write("")  # Spacing line 2
     if st.button(
         "🚀 Run Analysis", 
         type="primary", 
@@ -490,8 +490,7 @@ with col3:
         st.rerun()
 
 with col4:
-    # Thêm label giống col1, col2 để căn chỉnh
-    st.markdown('<p style="color: transparent; margin-bottom: 8px;">.</p>', unsafe_allow_html=True)
+    st.write("")  # Spacing line 1 (để cân với label của col1, col2)
     realtime_price_display()
 
 # ============================================
