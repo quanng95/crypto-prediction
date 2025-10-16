@@ -16,7 +16,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom CSS - FIXED COLORS & FONT SIZE
+# Custom CSS
 st.markdown("""
 <style>
     .main { 
@@ -24,7 +24,6 @@ st.markdown("""
         font-size: 16px !important;
     }
     
-    /* Ticker styling */
     .ticker-container {
         background-color: white;
         padding: 15px;
@@ -62,7 +61,6 @@ st.markdown("""
         font-size: 14px;
     }
     
-    /* Control panel styling */
     .control-symbol {
         color: #000000 !important;
         font-weight: bold;
@@ -81,7 +79,6 @@ st.markdown("""
         font-size: 28px;
     }
     
-    /* Increase all text size */
     p, span, div {
         font-size: 16px;
     }
@@ -98,16 +95,13 @@ st.markdown("""
         font-size: 28px !important;
     }
     
-    /* Hide Streamlit branding */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     
-    /* Metric styling */
     [data-testid="stMetricValue"] {
         font-size: 22px;
     }
     
-    /* Button styling */
     .stButton button {
         font-size: 15px;
     }
@@ -117,23 +111,19 @@ st.markdown("""
 # Symbols
 SYMBOLS = ["ETHUSDT", "BTCUSDT", "BNBUSDT", "SOLUSDT", "ADAUSDT", "DOGEUSDT", "ARBUSDT", "PAXGUSDT"]
 
-# Session state initialization
-if 'last_update' not in st.session_state:
-    st.session_state.last_update = time.time()
-if 'predictor' not in st.session_state:
-    st.session_state.predictor = None
-if 'predictions' not in st.session_state:
-    st.session_state.predictions = None
+# Initialize session state
 if 'show_chart' not in st.session_state:
     st.session_state.show_chart = False
 if 'chart_symbol' not in st.session_state:
     st.session_state.chart_symbol = "ETHUSDT"
 if 'chart_interval' not in st.session_state:
     st.session_state.chart_interval = "1h"
-if 'analysis_done' not in st.session_state:
-    st.session_state.analysis_done = False
+if 'predictor' not in st.session_state:
+    st.session_state.predictor = None
+if 'predictions' not in st.session_state:
+    st.session_state.predictions = None
 
-@st.cache_data(ttl=1)  # Cache 1 second for real-time updates
+@st.cache_data(ttl=1)
 def get_ticker(symbol):
     """Get ticker from Binance"""
     try:
@@ -150,7 +140,7 @@ def get_ticker(symbol):
     except:
         return None
 
-@st.cache_data(ttl=60)  # Cache 1 minute
+@st.cache_data(ttl=60)
 def get_klines(symbol, interval='1h', limit=200):
     """Get candlestick data"""
     try:
@@ -182,55 +172,47 @@ def get_klines(symbol, interval='1h', limit=200):
 # ============================================
 st.title("🔮 Crypto Prediction - Real-time")
 
-# Auto-refresh toggle
 col1, col2 = st.columns([5, 1])
 with col1:
     st.markdown("### Real-time Market Data")
 with col2:
-    auto_refresh = st.checkbox("Auto-refresh (1s)", value=True, key="auto_refresh_toggle")
+    auto_refresh = st.checkbox("Auto-refresh (1s)", value=True)
 
 # ============================================
-# TICKER BAR - ONLY PRICES REFRESH
+# TICKER BAR
 # ============================================
 st.markdown("---")
 
-# Create ticker bar container
-ticker_container = st.container()
-
-with ticker_container:
-    # Create 2 rows of 4 symbols each
-    for row in range(0, len(SYMBOLS), 4):
-        ticker_cols = st.columns(4)
-        
-        for idx, symbol in enumerate(SYMBOLS[row:row+4]):
-            with ticker_cols[idx]:
-                ticker_data = get_ticker(symbol)
-                if ticker_data:
-                    change_pct = ticker_data['change_percent']
-                    is_up = change_pct >= 0
-                    
-                    # Color classes
-                    price_class = "ticker-price-up" if is_up else "ticker-price-down"
-                    change_class = "ticker-change-up" if is_up else "ticker-change-down"
-                    arrow = "▲" if is_up else "▼"
-                    
-                    # HTML with proper colors
-                    html = f"""
-                    <div class="ticker-container">
-                        <div class="ticker-symbol">{symbol}</div>
-                        <div class="{price_class}">${ticker_data['price']:,.2f}</div>
-                        <div class="{change_class}">{arrow} {abs(change_pct):.2f}%</div>
-                    </div>
-                    """
-                    st.markdown(html, unsafe_allow_html=True)
-                    
-                    # Add button to show chart
-                    if st.button(f"📊 Chart", key=f"chart_btn_{symbol}"):
-                        st.session_state.show_chart = True
-                        st.session_state.chart_symbol = symbol
+for row in range(0, len(SYMBOLS), 4):
+    ticker_cols = st.columns(4)
+    
+    for idx, symbol in enumerate(SYMBOLS[row:row+4]):
+        with ticker_cols[idx]:
+            ticker_data = get_ticker(symbol)
+            if ticker_data:
+                change_pct = ticker_data['change_percent']
+                is_up = change_pct >= 0
+                
+                price_class = "ticker-price-up" if is_up else "ticker-price-down"
+                change_class = "ticker-change-up" if is_up else "ticker-change-down"
+                arrow = "▲" if is_up else "▼"
+                
+                html = f"""
+                <div class="ticker-container">
+                    <div class="ticker-symbol">{symbol}</div>
+                    <div class="{price_class}">${ticker_data['price']:,.2f}</div>
+                    <div class="{change_class}">{arrow} {abs(change_pct):.2f}%</div>
+                </div>
+                """
+                st.markdown(html, unsafe_allow_html=True)
+                
+                if st.button(f"📊 Chart", key=f"chart_{symbol}_{row}"):
+                    st.session_state.show_chart = True
+                    st.session_state.chart_symbol = symbol
+                    st.rerun()
 
 # ============================================
-# CANDLESTICK CHART MODAL - FIXED POSITION
+# CANDLESTICK CHART - FIXED CLOSE BUTTON
 # ============================================
 if st.session_state.show_chart:
     st.markdown("---")
@@ -242,26 +224,22 @@ if st.session_state.show_chart:
         st.markdown(f"### {st.session_state.chart_symbol}")
     
     with col2:
-        new_interval = st.selectbox(
+        interval = st.selectbox(
             "Timeframe",
             ['15m', '1h', '4h', '1d'],
-            index=['15m', '1h', '4h', '1d'].index(st.session_state.chart_interval),
-            key="chart_interval_select"
+            index=['15m', '1h', '4h', '1d'].index(st.session_state.chart_interval)
         )
-        if new_interval != st.session_state.chart_interval:
-            st.session_state.chart_interval = new_interval
-            st.rerun()
+        if interval != st.session_state.chart_interval:
+            st.session_state.chart_interval = interval
     
     with col3:
-        if st.button("❌ Close Chart", key="close_chart_btn"):
+        if st.button("❌ Close", type="primary"):
             st.session_state.show_chart = False
             st.rerun()
     
-    # Fetch and display chart
     df = get_klines(st.session_state.chart_symbol, st.session_state.chart_interval, 200)
     
     if df is not None and len(df) > 0:
-        # Create candlestick chart
         fig = make_subplots(
             rows=2, cols=1,
             shared_xaxes=True,
@@ -270,7 +248,6 @@ if st.session_state.show_chart:
             subplot_titles=(f'{st.session_state.chart_symbol} - {st.session_state.chart_interval.upper()}', 'Volume')
         )
         
-        # Candlestick
         fig.add_trace(
             go.Candlestick(
                 x=df['timestamp'],
@@ -285,7 +262,6 @@ if st.session_state.show_chart:
             row=1, col=1
         )
         
-        # Volume
         colors = ['#26a69a' if row['close'] >= row['open'] else '#ef5350' 
                  for _, row in df.iterrows()]
         
@@ -300,22 +276,32 @@ if st.session_state.show_chart:
             row=2, col=1
         )
         
-        # Layout
+        # ENABLE ZOOM & PAN
         fig.update_layout(
             height=700,
             template='plotly_dark',
             xaxis_rangeslider_visible=False,
             showlegend=False,
-            hovermode='x unified'
+            hovermode='x unified',
+            dragmode='zoom',  # Enable zoom by default
+            modebar_add=['pan2d', 'zoom2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d']
         )
+        
+        # Enable drag to zoom and scroll to zoom
+        fig.update_xaxes(fixedrange=False)
+        fig.update_yaxes(fixedrange=False)
         
         fig.update_xaxes(title_text="Time", row=2, col=1)
         fig.update_yaxes(title_text="Price ($)", row=1, col=1)
         fig.update_yaxes(title_text="Volume", row=2, col=1)
         
-        st.plotly_chart(fig, use_container_width=True, key="candlestick_chart")
+        st.plotly_chart(fig, use_container_width=True, config={
+            'scrollZoom': True,
+            'displayModeBar': True,
+            'modeBarButtonsToAdd': ['drawline', 'drawopenpath', 'eraseshape'],
+            'displaylogo': False
+        })
         
-        # Current stats
         current = df.iloc[-1]
         col1, col2, col3, col4 = st.columns(4)
         
@@ -329,32 +315,32 @@ if st.session_state.show_chart:
             st.metric("Close", f"${current['close']:.2f}")
     
     st.markdown("---")
+    # STOP AUTO-REFRESH when chart is open
+    st.stop()
 
 # ============================================
-# CONTROL PANEL - FIXED COLORS
+# CONTROL PANEL
 # ============================================
 st.markdown("### 🎛️ Control Panel")
 
 col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
 
 with col1:
-    selected_symbol = st.selectbox("📊 Symbol", SYMBOLS, key="analysis_symbol")
+    selected_symbol = st.selectbox("📊 Symbol", SYMBOLS)
 
 with col2:
     timezone = st.selectbox(
         "🌍 Timezone",
         ["Asia/Ho_Chi_Minh", "America/New_York", "Europe/London", "Asia/Tokyo"],
-        index=0,
-        key="timezone_select"
+        index=0
     )
 
 with col3:
     st.write("")
     st.write("")
-    run_analysis = st.button("🚀 Run Analysis", type="primary", use_container_width=True, key="run_analysis_btn")
+    run_analysis = st.button("🚀 Run Analysis", type="primary", use_container_width=True)
 
 with col4:
-    # Current price display with proper colors
     current_ticker = get_ticker(selected_symbol)
     if current_ticker:
         change_pct = current_ticker['change_percent']
@@ -377,26 +363,21 @@ with col4:
 if run_analysis:
     with st.spinner(f"🔄 Analyzing {selected_symbol}..."):
         try:
-            # Create predictor
             predictor = AdvancedETHPredictor(timezone=timezone)
             
-            # Progress bar
             progress_bar = st.progress(0)
             status_text = st.empty()
             
             status_text.text("Fetching data...")
             progress_bar.progress(20)
             
-            # Run analysis
             all_data, all_predictions = predictor.run_analysis(selected_symbol)
             
             progress_bar.progress(100)
             status_text.text("✅ Analysis complete!")
             
-            # Store in session state
             st.session_state.predictor = predictor
             st.session_state.predictions = all_predictions
-            st.session_state.analysis_done = True
             
             time.sleep(1)
             progress_bar.empty()
@@ -406,19 +387,17 @@ if run_analysis:
             
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
-            st.session_state.analysis_done = False
 
 # ============================================
-# RESULTS DISPLAY - NO DUPLICATE
+# RESULTS DISPLAY - ONLY ONCE
 # ============================================
-if st.session_state.analysis_done and st.session_state.predictor and st.session_state.predictions:
+if st.session_state.predictor is not None and st.session_state.predictions is not None:
     predictor = st.session_state.predictor
     all_predictions = st.session_state.predictions
     
     st.markdown("---")
     st.markdown("## 📊 Analysis Results")
     
-    # Single set of tabs
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📈 Summary",
         "⏰ 4H Predictions",
@@ -427,11 +406,9 @@ if st.session_state.analysis_done and st.session_state.predictor and st.session_
         "🎯 Final Predictions"
     ])
     
-    # TAB 1: SUMMARY
     with tab1:
         st.markdown("### 🏆 Best Models Performance")
         
-        # Performance table
         perf_data = []
         for timeframe in ['4h', '1d', '1w']:
             if timeframe in predictor.all_model_results:
@@ -451,10 +428,8 @@ if st.session_state.analysis_done and st.session_state.predictor and st.session_
             df_perf = pd.DataFrame(perf_data)
             st.dataframe(df_perf, use_container_width=True, hide_index=True)
         
-        # Charts
         st.markdown("### 📊 Performance Visualization")
         
-        # Create subplots
         fig = make_subplots(
             rows=2, cols=2,
             subplot_titles=('R² Score by Timeframe', 'MAE Comparison', 
@@ -477,28 +452,24 @@ if st.session_state.analysis_done and st.session_state.predictor and st.session_
                 mae_values.append(result['mae'])
                 dir_acc.append(result['direction_accuracy'] * 100)
         
-        # R² Score
         fig.add_trace(
             go.Bar(x=timeframes, y=r2_scores, name='R² Score',
                    marker_color=['#2ecc71', '#3498db', '#9b59b6']),
             row=1, col=1
         )
         
-        # MAE
         fig.add_trace(
             go.Bar(x=timeframes, y=mae_values, name='MAE',
                    marker_color=['#e74c3c', '#f39c12', '#1abc9c']),
             row=1, col=2
         )
         
-        # Direction Accuracy
         fig.add_trace(
             go.Bar(x=timeframes, y=dir_acc, name='Accuracy (%)',
                    marker_color=['#16a085', '#27ae60', '#2980b9']),
             row=2, col=1
         )
         
-        # Model Distribution
         model_names = [predictor.best_models.get(tf, 'N/A') 
                       for tf in ['4h', '1d', '1w'] 
                       if tf in predictor.best_models]
@@ -515,7 +486,6 @@ if st.session_state.analysis_done and st.session_state.predictor and st.session_
         fig.update_layout(height=800, showlegend=False, template='plotly_white')
         st.plotly_chart(fig, use_container_width=True)
     
-    # TAB 2-4: TIMEFRAME PREDICTIONS
     for tab, timeframe in zip([tab2, tab3, tab4], ['4h', '1d', '1w']):
         with tab:
             if timeframe not in all_predictions:
@@ -524,7 +494,6 @@ if st.session_state.analysis_done and st.session_state.predictor and st.session_
             
             st.markdown(f"### 🎯 {timeframe.upper()} Predictions")
             
-            # Predictions table
             pred_data = []
             best_model = predictor.best_models.get(timeframe, '')
             
@@ -552,7 +521,6 @@ if st.session_state.analysis_done and st.session_state.predictor and st.session_
                 df_pred = pd.DataFrame(pred_data)
                 st.dataframe(df_pred, use_container_width=True, hide_index=True)
                 
-                # Chart
                 fig = go.Figure()
                 
                 prices = [float(p['Predicted Price'].replace('$', '')) for p in pred_data]
@@ -567,7 +535,6 @@ if st.session_state.analysis_done and st.session_state.predictor and st.session_
                     marker=dict(size=10)
                 ))
                 
-                # Current price line
                 fig.add_hline(
                     y=predictor.reference_price,
                     line_dash="dash",
@@ -575,21 +542,28 @@ if st.session_state.analysis_done and st.session_state.predictor and st.session_
                     annotation_text=f"Current: ${predictor.reference_price:.2f}"
                 )
                 
+                # ENABLE ZOOM & PAN
                 fig.update_layout(
                     title=f"{timeframe.upper()} Price Predictions",
                     xaxis_title="Period",
                     yaxis_title="Price ($)",
                     template='plotly_white',
-                    height=500
+                    height=500,
+                    dragmode='zoom'
                 )
                 
-                st.plotly_chart(fig, use_container_width=True)
+                fig.update_xaxes(fixedrange=False)
+                fig.update_yaxes(fixedrange=False)
+                
+                st.plotly_chart(fig, use_container_width=True, config={
+                    'scrollZoom': True,
+                    'displayModeBar': True,
+                    'displaylogo': False
+                })
     
-    # TAB 5: FINAL PREDICTIONS
     with tab5:
         st.markdown("### 🎯 Final Predictions Summary")
         
-        # Consolidated predictions
         final_data = []
         
         for timeframe in ['4h', '1d', '1w']:
@@ -624,7 +598,6 @@ if st.session_state.analysis_done and st.session_state.predictor and st.session_
             df_final = pd.DataFrame(final_data)
             st.dataframe(df_final, use_container_width=True, hide_index=True)
             
-            # Combined chart
             st.markdown("### 📊 All Timeframes Comparison")
             
             fig = go.Figure()
@@ -645,7 +618,6 @@ if st.session_state.analysis_done and st.session_state.predictor and st.session_
                             marker=dict(size=8)
                         ))
             
-            # Current price
             fig.add_hline(
                 y=predictor.reference_price,
                 line_dash="dash",
@@ -653,18 +625,30 @@ if st.session_state.analysis_done and st.session_state.predictor and st.session_
                 annotation_text=f"Current: ${predictor.reference_price:.2f}"
             )
             
+            # ENABLE ZOOM & PAN
             fig.update_layout(
                 title="Final Price Predictions - All Timeframes",
                 xaxis_title="Period",
                 yaxis_title="Price ($)",
                 template='plotly_white',
-                height=600
+                height=600,
+                dragmode='zoom'
             )
             
-            st.plotly_chart(fig, use_container_width=True)
+            fig.update_xaxes(fixedrange=False)
+            fig.update_yaxes(fixedrange=False)
+            
+            st.plotly_chart(fig, use_container_width=True, config={
+                'scrollZoom': True,
+                'displayModeBar': True,
+                'displaylogo': False
+            })
+    
+    # STOP AUTO-REFRESH when showing results
+    st.stop()
 
 # ============================================
-# AUTO-REFRESH (1 second) - ONLY TICKER PRICES
+# AUTO-REFRESH
 # ============================================
 if auto_refresh:
     time.sleep(1)
