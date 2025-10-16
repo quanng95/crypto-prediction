@@ -8,7 +8,7 @@ from datetime import datetime
 import numpy as np
 
 # Import predictor
-from eth_predictor import AdvancedETHPredictor
+from eth import AdvancedETHPredictor
 
 # Page config
 st.set_page_config(
