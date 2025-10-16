@@ -59,33 +59,8 @@ st.markdown("""
         border: 1px solid #3d3d3d;
     }
     
-    .ticker-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 15px;
-    }
-    
-    /* Carousel buttons */
-    .carousel-btn {
-        background-color: #667eea;
-        color: white;
-        border: none;
-        padding: 10px 15px;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 20px;
-        font-weight: bold;
-        transition: all 0.3s;
-    }
-    
-    .carousel-btn:hover {
-        background-color: #764ba2;
-        transform: scale(1.1);
-    }
-    
-    /* Gray ticker boxes - CLICKABLE */
-    .ticker-container {
+    /* FIXED: Clickable ticker boxes with proper colors */
+    .ticker-box {
         background-color: #2d2d2d;
         padding: 15px;
         border-radius: 8px;
@@ -93,10 +68,11 @@ st.markdown("""
         border: 1px solid #3d3d3d;
         cursor: pointer;
         transition: all 0.3s;
-        flex: 1;
+        text-align: center;
+        margin: 5px;
     }
     
-    .ticker-container:hover {
+    .ticker-box:hover {
         background-color: #3d3d3d;
         border-color: #667eea;
         transform: translateY(-3px);
@@ -104,32 +80,37 @@ st.markdown("""
     }
     
     .ticker-symbol {
-        color: #ffffff !important;
-        font-weight: bold !important;
-        font-size: 16px !important;
-        margin-bottom: 5px !important;
+        color: #ffffff;
+        font-weight: bold;
+        font-size: 14px;
+        margin-bottom: 8px;
     }
     
-    .ticker-price-up {
-        color: #27ae60 !important;
+    .ticker-price {
         font-weight: bold;
         font-size: 20px;
+        margin: 5px 0;
     }
     
-    .ticker-price-down {
-        color: #e74c3c !important;
-        font-weight: bold;
-        font-size: 20px;
-    }
-    
-    .ticker-change-up {
+    .price-up {
         color: #27ae60 !important;
-        font-size: 14px;
     }
     
-    .ticker-change-down {
+    .price-down {
         color: #e74c3c !important;
+    }
+    
+    .ticker-change {
         font-size: 14px;
+        margin-top: 5px;
+    }
+    
+    .change-up {
+        color: #27ae60 !important;
+    }
+    
+    .change-down {
+        color: #e74c3c !important;
     }
     
     /* Control price box */
@@ -256,6 +237,8 @@ if 'predictions' not in st.session_state:
     st.session_state.predictions = None
 if 'ticker_start_index' not in st.session_state:
     st.session_state.ticker_start_index = 0
+if 'auto_refresh_enabled' not in st.session_state:
+    st.session_state.auto_refresh_enabled = True
 
 @st.cache_data(ttl=1)
 def get_ticker(symbol):
@@ -392,13 +375,18 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Auto-refresh toggle (compact)
+# FIXED: Auto-refresh toggle - disable when viewing chart
 col1, col2 = st.columns([6, 1])
 with col2:
-    auto_refresh = st.checkbox("Auto (1s)", value=True)
+    if st.session_state.show_chart:
+        st.session_state.auto_refresh_enabled = False
+        auto_refresh = st.checkbox("Auto (1s)", value=False, disabled=True, help="Disabled while viewing chart")
+    else:
+        auto_refresh = st.checkbox("Auto (1s)", value=st.session_state.auto_refresh_enabled)
+        st.session_state.auto_refresh_enabled = auto_refresh
 
 # ============================================
-# TICKER CAROUSEL - ONE ROW WITH < >
+# TICKER CAROUSEL - FIXED WITH PROPER COLORS
 # ============================================
 st.markdown("---")
 
@@ -417,7 +405,7 @@ with nav_col1:
             st.session_state.ticker_start_index -= visible_count
             st.rerun()
 
-# Display tickers
+# FIXED: Display tickers with proper color formatting
 for idx, col in enumerate(ticker_cols):
     symbol_idx = start_idx + idx
     if symbol_idx < len(SYMBOLS):
@@ -429,18 +417,27 @@ for idx, col in enumerate(ticker_cols):
                 change_pct = ticker_data['change_percent']
                 is_up = change_pct >= 0
                 
-                price_class = "ticker-price-up" if is_up else "ticker-price-down"
-                change_class = "ticker-change-up" if is_up else "ticker-change-down"
+                # Determine color classes
+                price_class = "price-up" if is_up else "price-down"
+                change_class = "change-up" if is_up else "change-down"
                 arrow = "▲" if is_up else "▼"
                 
-                # CLICKABLE TICKER - No button, click on box
-                if st.button(
-                    f"{symbol}\n${ticker_data['price']:,.2f}\n{arrow} {abs(change_pct):.2f}%",
-                    key=f"ticker_{symbol}_{symbol_idx}",
-                    use_container_width=True
-                ):
+                # Create clickable ticker box with proper HTML
+                ticker_html = f"""
+                <div class="ticker-box" onclick="document.getElementById('ticker_btn_{symbol_idx}').click()">
+                    <div class="ticker-symbol">{symbol}</div>
+                    <div class="ticker-price {price_class}">${ticker_data['price']:,.2f}</div>
+                    <div class="ticker-change {change_class}">{arrow} {abs(change_pct):.2f}%</div>
+                </div>
+                """
+                
+                st.markdown(ticker_html, unsafe_allow_html=True)
+                
+                # Hidden button for click handling
+                if st.button("", key=f"ticker_btn_{symbol_idx}", help=f"View {symbol} chart"):
                     st.session_state.show_chart = True
                     st.session_state.chart_symbol = symbol
+                    st.session_state.auto_refresh_enabled = False  # Disable auto-refresh
                     st.rerun()
 
 # Next button
@@ -451,7 +448,7 @@ with nav_col2:
             st.rerun()
 
 # ============================================
-# CANDLESTICK CHART
+# CANDLESTICK CHART - FIXED PERSISTENCE
 # ============================================
 if st.session_state.show_chart:
     st.markdown("---")
@@ -466,16 +463,20 @@ if st.session_state.show_chart:
         interval = st.selectbox(
             "Timeframe",
             ['15m', '1h', '4h', '1d'],
-            index=['15m', '1h', '4h', '1d'].index(st.session_state.chart_interval)
+            index=['15m', '1h', '4h', '1d'].index(st.session_state.chart_interval),
+            key="chart_interval_select"
         )
         if interval != st.session_state.chart_interval:
             st.session_state.chart_interval = interval
-    
-    with col3:
-        if st.button("❌ Close", type="primary"):
-            st.session_state.show_chart = False
             st.rerun()
     
+    with col3:
+        if st.button("❌ Close", type="primary", key="close_chart_btn"):
+            st.session_state.show_chart = False
+            st.session_state.auto_refresh_enabled = True  # Re-enable auto-refresh
+            st.rerun()
+    
+    # Fetch and display chart
     df = get_klines(st.session_state.chart_symbol, st.session_state.chart_interval, 200)
     
     if df is not None and len(df) > 0:
@@ -552,7 +553,8 @@ if st.session_state.show_chart:
             st.metric("Close", f"${current['close']:.2f}")
     
     st.markdown("---")
-    st.stop()
+    # IMPORTANT: Don't call st.stop() here to allow rest of UI to render
+    # st.stop()
 
 # ============================================
 # CONTROL PANEL
@@ -562,19 +564,20 @@ st.markdown("### 🎛️ Control Panel")
 col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
 
 with col1:
-    selected_symbol = st.selectbox("📊 Symbol", SYMBOLS)
+    selected_symbol = st.selectbox("📊 Symbol", SYMBOLS, key="control_symbol_select")
 
 with col2:
     timezone = st.selectbox(
         "🌍 Timezone",
         ["Asia/Ho_Chi_Minh", "America/New_York", "Europe/London", "Asia/Tokyo"],
-        index=0
+        index=0,
+        key="timezone_select"
     )
 
 with col3:
     st.write("")
     st.write("")
-    run_analysis = st.button("🚀 Run Analysis", type="primary", use_container_width=True)
+    run_analysis = st.button("🚀 Run Analysis", type="primary", use_container_width=True, key="run_analysis_btn")
 
 with col4:
     current_ticker = get_ticker(selected_symbol)
@@ -627,7 +630,7 @@ if run_analysis:
             st.error(f"❌ Error: {str(e)}")
 
 # ============================================
-# RESULTS DISPLAY (Same as before)
+# RESULTS DISPLAY
 # ============================================
 if st.session_state.predictor is not None and st.session_state.predictions is not None:
     predictor = st.session_state.predictor
@@ -648,7 +651,6 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
         "🔮 Final Predictions"
     ])
     
-    # [REST OF THE TABS CODE REMAINS THE SAME AS PREVIOUS VERSION]
     # TAB 1: Trading Signals
     with tab1:
         st.markdown("### 🎯 Trading Signals & Recommendations")
@@ -720,7 +722,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                 
                 st.markdown("---")
     
-    # TAB 2: SUMMARY (existing code)
+    # TAB 2: SUMMARY
     with tab2:
         st.markdown("### 🏆 Best Models Performance")
         
@@ -801,7 +803,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
         fig.update_layout(height=800, showlegend=False, template='plotly_dark')
         st.plotly_chart(fig, use_container_width=True)
     
-    # TAB 3-5: TIMEFRAME PREDICTIONS (existing code with pan enabled)
+    # TAB 3-5: TIMEFRAME PREDICTIONS
     for tab, timeframe in zip([tab3, tab4, tab5], ['4h', '1d', '1w']):
         with tab:
             if timeframe not in all_predictions:
@@ -864,7 +866,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                     yaxis_title="Price ($)",
                     template='plotly_dark',
                     height=500,
-                    dragmode='pan'  # LEFT CLICK + DRAG = PAN
+                    dragmode='pan'
                 )
                 
                 fig.update_xaxes(fixedrange=False)
@@ -876,7 +878,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                     'displaylogo': False
                 })
     
-    # TAB 6: FINAL PREDICTIONS (existing code with pan enabled)
+    # TAB 6: FINAL PREDICTIONS
     with tab6:
         st.markdown("### 🎯 Final Predictions Summary")
         
@@ -947,7 +949,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                 yaxis_title="Price ($)",
                 template='plotly_dark',
                 height=600,
-                dragmode='pan'  # LEFT CLICK + DRAG = PAN
+                dragmode='pan'
             )
             
             fig.update_xaxes(fixedrange=False)
@@ -958,13 +960,11 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                 'displayModeBar': True,
                 'displaylogo': False
             })
-    
-    st.stop()
 
 # ============================================
-# AUTO-REFRESH
+# AUTO-REFRESH - ONLY WHEN NOT VIEWING CHART
 # ============================================
-if auto_refresh:
+if auto_refresh and not st.session_state.show_chart:
     time.sleep(1)
     st.rerun()
 
