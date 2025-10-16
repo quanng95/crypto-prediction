@@ -338,7 +338,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================
-# FRAGMENT 1: TICKER CAROUSEL (Auto-refresh)
+# TICKER CAROUSEL (Auto-refresh)
 # ============================================
 @st.fragment
 def ticker_carousel():
@@ -346,7 +346,6 @@ def ticker_carousel():
     count = st_autorefresh(interval=500, limit=None, key="ticker_refresh")
     
     st.markdown("---")
-    st.markdown("### 📊 Live Market Prices")
     
     visible_count = 4
     start_idx = st.session_state.ticker_start_index
@@ -391,7 +390,7 @@ def ticker_carousel():
                 st.rerun()
 
 # ============================================
-# FRAGMENT 2: REAL-TIME PRICE DISPLAY (Auto-refresh)
+# REAL-TIME PRICE DISPLAY (Auto-refresh)
 # ============================================
 @st.fragment
 def realtime_price_display():
@@ -414,8 +413,11 @@ def realtime_price_display():
         </div>
         """, unsafe_allow_html=True)
 
+# Call ticker carousel
+ticker_carousel()
+
 # ============================================
-# MAIN CONTROL PANEL (Static - No auto-refresh)
+# CONTROL PANEL (Static - No auto-refresh)
 # ============================================
 st.markdown("---")
 st.markdown("### 🎛️ Control Panel")
@@ -424,7 +426,7 @@ col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
 
 with col1:
     selected_symbol = st.selectbox(
-        "📊 Select Symbol", 
+        "📊 Symbol", 
         SYMBOLS, 
         index=SYMBOLS.index(st.session_state.selected_symbol),
         key="symbol_select_main"
@@ -436,7 +438,7 @@ with col1:
 with col2:
     timezone_options = ["Asia/Ho_Chi_Minh", "America/New_York", "Europe/London", "Asia/Tokyo"]
     timezone = st.selectbox(
-        "🌍 Select Timezone",
+        "🌍 Timezone",
         timezone_options,
         index=timezone_options.index(st.session_state.selected_timezone),
         key="timezone_select_main"
@@ -458,11 +460,7 @@ with col3:
         st.rerun()
 
 with col4:
-    # Real-time price display (auto-refreshing fragment)
     realtime_price_display()
-
-# Call ticker carousel fragment
-ticker_carousel()
 
 # ============================================
 # CANDLESTICK CHART
@@ -569,10 +567,10 @@ if st.session_state.show_chart:
     st.stop()
 
 # ============================================
-# RUN ANALYSIS (Triggered by button)
+# RUN ANALYSIS (Triggered by flag)
 # ============================================
 if st.session_state.trigger_analysis:
-    st.session_state.trigger_analysis = False  # Reset flag
+    st.session_state.trigger_analysis = False  # Reset flag immediately
     
     with st.spinner(f"🔄 Analyzing {st.session_state.selected_symbol}..."):
         try:
