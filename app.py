@@ -54,6 +54,23 @@ st.markdown("""
         opacity: 0.9;
     }
     
+    /* Ticker box styling */
+    .ticker-box {
+        background-color: #2d2d2d;
+        padding: 15px;
+        border-radius: 8px;
+        text-align: center;
+        border: 1px solid #3d3d3d;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .ticker-box:hover {
+        border-color: #667eea;
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+    }
+    
     /* Control price box */
     .control-price-box {
         background-color: #2d2d2d;
@@ -61,24 +78,14 @@ st.markdown("""
         border-radius: 5px;
         margin-top: 25px;
         border: 1px solid #3d3d3d;
+        text-align: center;
     }
     
     .control-symbol {
         color: #ffffff !important;
         font-weight: bold !important;
         font-size: 14px !important;
-    }
-    
-    .control-price-up {
-        color: #27ae60 !important;
-        font-weight: bold;
-        font-size: 28px;
-    }
-    
-    .control-price-down {
-        color: #e74c3c !important;
-        font-weight: bold;
-        font-size: 28px;
+        margin-bottom: 5px;
     }
     
     /* Trading signal boxes */
@@ -182,6 +189,8 @@ if 'selected_symbol' not in st.session_state:
     st.session_state.selected_symbol = "ETHUSDT"
 if 'selected_timezone' not in st.session_state:
     st.session_state.selected_timezone = "Asia/Ho_Chi_Minh"
+if 'trigger_analysis' not in st.session_state:
+    st.session_state.trigger_analysis = False
 
 # Initialize WebSocket
 if 'ws_handler' not in st.session_state:
@@ -210,11 +219,9 @@ def get_ticker_realtime(symbol):
     """Get ticker from WebSocket (real-time) with REST API fallback"""
     data = st.session_state.ws_handler.get_price(symbol)
     
-    # Check if data is fresh (< 5 seconds old)
     if data and (time.time() - data['timestamp']) < 5:
         return data
     
-    # Fallback to REST API
     return get_ticker(symbol)
 
 @st.cache_data(ttl=60)
@@ -336,18 +343,14 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================
-# TICKER CAROUSEL + CONTROL PANEL - COMBINED FRAGMENT
+# TICKER CAROUSEL - AUTO REFRESH
 # ============================================
 @st.fragment
-def ticker_and_control_panel():
-    """Combined ticker carousel and control panel that auto-refreshes together"""
+def ticker_carousel():
+    """Ticker carousel that auto-refreshes independently"""
     
-    # Auto-refresh this entire fragment (500ms)
-    count = st_autorefresh(interval=500, limit=None, key="main_refresh")
+    count = st_autorefresh(interval=500, limit=None, key="ticker_refresh")
     
-    # ============================================
-    # TICKER CAROUSEL
-    # ============================================
     st.markdown("---")
     
     visible_count = 4
@@ -355,14 +358,12 @@ def ticker_and_control_panel():
     
     nav_col1, *ticker_cols, nav_col2 = st.columns([1, 2, 2, 2, 2, 1])
     
-    # Previous button
     with nav_col1:
         if st.button("◀", key=f"prev_btn_{count}", help="Previous symbols"):
             if st.session_state.ticker_start_index > 0:
                 st.session_state.ticker_start_index -= visible_count
                 st.rerun()
     
-    # Display tickers
     for idx, col in enumerate(ticker_cols):
         symbol_idx = start_idx + idx
         if symbol_idx < len(SYMBOLS):
@@ -375,8 +376,27 @@ def ticker_and_control_panel():
                     change_pct = ticker_data['change_percent']
                     is_up = change_pct >= 0
                     
+                    # COLOR: Green if up, Red if down
+                    price_color = "#27ae60" if is_up else "#e74c3c"
+                    arrow = "▲" if is_up else "▼"
+                    
+                    # Clickable ticker box with colors
+                    ticker_html = f"""
+                    <div class="ticker-box">
+                        <div style="color: #ffffff; font-weight: bold; font-size: 16px; margin-bottom: 8px;">
+                            {symbol}
+                        </div>
+                        <div style="color: {price_color}; font-weight: bold; font-size: 24px; margin-bottom: 5px;">
+                            ${ticker_data['price']:,.2f}
+                        </div>
+                        <div style="color: {price_color}; font-size: 14px;">
+                            {arrow} {abs(change_pct):.2f}%
+                        </div>
+                    </div>
+                    """
+                    
                     if st.button(
-                        f"**{symbol}**\n\n${ticker_data['price']:,.2f}\n\n{'▲' if is_up else '▼'} {abs(change_pct):.2f}%",
+                        f"📊 {symbol}",
                         key=f"ticker_{symbol}_{count}",
                         use_container_width=True,
                         type="secondary"
@@ -384,75 +404,17 @@ def ticker_and_control_panel():
                         st.session_state.show_chart = True
                         st.session_state.chart_symbol = symbol
                         st.rerun()
+                    
+                    st.markdown(ticker_html, unsafe_allow_html=True)
     
-    # Next button
     with nav_col2:
         if st.button("▶", key=f"next_btn_{count}", help="Next symbols"):
             if st.session_state.ticker_start_index + visible_count < len(SYMBOLS):
                 st.session_state.ticker_start_index += visible_count
                 st.rerun()
-    
-    # ============================================
-    # CONTROL PANEL (INSIDE SAME FRAGMENT)
-    # ============================================
-    st.markdown("---")
-    st.markdown("### 🎛️ Control Panel")
-    
-    col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
-    
-    with col1:
-        selected_symbol = st.selectbox(
-            "📊 Symbol", 
-            SYMBOLS, 
-            index=SYMBOLS.index(st.session_state.selected_symbol),
-            key=f"symbol_select_{count}"
-        )
-        if selected_symbol != st.session_state.selected_symbol:
-            st.session_state.selected_symbol = selected_symbol
-    
-    with col2:
-        timezone_options = ["Asia/Ho_Chi_Minh", "America/New_York", "Europe/London", "Asia/Tokyo"]
-        timezone = st.selectbox(
-            "🌍 Timezone",
-            timezone_options,
-            index=timezone_options.index(st.session_state.selected_timezone),
-            key=f"timezone_select_{count}"
-        )
-        if timezone != st.session_state.selected_timezone:
-            st.session_state.selected_timezone = timezone
-    
-    with col3:
-        st.write("")
-        st.write("")
-        run_analysis = st.button(
-            "🚀 Run Analysis", 
-            type="primary", 
-            use_container_width=True,
-            key=f"run_btn_{count}"
-        )
-    
-    with col4:
-        # Real-time price for selected symbol
-        current_ticker = get_ticker_realtime(st.session_state.selected_symbol)
-        if current_ticker:
-            change_pct = current_ticker['change_percent']
-            is_up = change_pct >= 0
-            price_class = "control-price-up" if is_up else "control-price-down"
-            
-            st.markdown(f"""
-            <div class="control-price-box">
-                <div class="control-symbol">{st.session_state.selected_symbol}</div>
-                <div class="{price_class}">${current_ticker['price']:,.2f}</div>
-                <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">
-                    {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    return run_analysis
 
-# Call combined fragment
-run_analysis = ticker_and_control_panel()
+# Call ticker carousel
+ticker_carousel()
 
 # ============================================
 # CANDLESTICK CHART
@@ -559,9 +521,60 @@ if st.session_state.show_chart:
     st.stop()
 
 # ============================================
+# CONTROL PANEL
+# ============================================
+st.markdown("---")
+st.markdown("### 🎛️ Control Panel")
+
+col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
+
+with col1:
+    selected_symbol = st.selectbox("📊 Symbol", SYMBOLS, index=SYMBOLS.index(st.session_state.selected_symbol))
+    st.session_state.selected_symbol = selected_symbol
+
+with col2:
+    timezone_options = ["Asia/Ho_Chi_Minh", "America/New_York", "Europe/London", "Asia/Tokyo"]
+    timezone = st.selectbox(
+        "🌍 Timezone",
+        timezone_options,
+        index=timezone_options.index(st.session_state.selected_timezone)
+    )
+    st.session_state.selected_timezone = timezone
+
+with col3:
+    st.write("")
+    st.write("")
+    if st.button("🚀 Run Analysis", type="primary", use_container_width=True):
+        st.session_state.trigger_analysis = True
+        st.rerun()
+
+with col4:
+    # Real-time price with colors
+    current_ticker = get_ticker_realtime(st.session_state.selected_symbol)
+    if current_ticker:
+        change_pct = current_ticker['change_percent']
+        is_up = change_pct >= 0
+        price_color = "#27ae60" if is_up else "#e74c3c"
+        arrow = "▲" if is_up else "▼"
+        
+        st.markdown(f"""
+        <div class="control-price-box">
+            <div class="control-symbol">{st.session_state.selected_symbol}</div>
+            <div style="color: {price_color}; font-weight: bold; font-size: 28px; margin: 5px 0;">
+                ${current_ticker['price']:,.2f}
+            </div>
+            <div style="color: {price_color}; font-size: 14px;">
+                {arrow} {abs(change_pct):.2f}%
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# ============================================
 # RUN ANALYSIS
 # ============================================
-if run_analysis:
+if st.session_state.trigger_analysis:
+    st.session_state.trigger_analysis = False
+    
     with st.spinner(f"🔄 Analyzing {st.session_state.selected_symbol}..."):
         try:
             predictor = AdvancedETHPredictor(timezone=st.session_state.selected_timezone)
@@ -587,6 +600,7 @@ if run_analysis:
             status_text.empty()
             
             st.success(f"✅ Analysis completed for {st.session_state.selected_symbol}!")
+            st.rerun()
             
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
