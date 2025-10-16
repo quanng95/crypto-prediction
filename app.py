@@ -417,7 +417,7 @@ with nav_col1:
             st.session_state.ticker_start_index -= visible_count
             st.rerun()
 
-# Display tickers with colored prices and changes
+# Display tickers
 for idx, col in enumerate(ticker_cols):
     symbol_idx = start_idx + idx
     if symbol_idx < len(SYMBOLS):
@@ -429,25 +429,16 @@ for idx, col in enumerate(ticker_cols):
                 change_pct = ticker_data['change_percent']
                 is_up = change_pct >= 0
                 
-                # Color based on price change
-                color = "#27ae60" if is_up else "#e74c3c"
+                price_class = "ticker-price-up" if is_up else "ticker-price-down"
+                change_class = "ticker-change-up" if is_up else "ticker-change-down"
                 arrow = "▲" if is_up else "▼"
                 
-                # Create clickable ticker box with colored price and change
-                st.markdown(f"""
-                <div class="ticker-container" style="text-align: center;">
-                    <div class="ticker-symbol">{symbol}</div>
-                    <div style="color: {color}; font-weight: bold; font-size: 20px; margin: 5px 0;">
-                        ${ticker_data['price']:,.2f}
-                    </div>
-                    <div style="color: {color}; font-size: 14px;">
-                        {arrow} {abs(change_pct):.2f}%
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Invisible button overlay for click detection
-                if st.button("📊", key=f"ticker_{symbol}_{symbol_idx}", help=f"View {symbol} chart"):
+                # CLICKABLE TICKER - No button, click on box
+                if st.button(
+                    f"{symbol}\n${ticker_data['price']:,.2f}\n{arrow} {abs(change_pct):.2f}%",
+                    key=f"ticker_{symbol}_{symbol_idx}",
+                    use_container_width=True
+                ):
                     st.session_state.show_chart = True
                     st.session_state.chart_symbol = symbol
                     st.rerun()
@@ -481,7 +472,7 @@ if st.session_state.show_chart:
             st.session_state.chart_interval = interval
     
     with col3:
-        if st.button("❌ Close", type="primary", key="close_chart_btn"):
+        if st.button("❌ Close", type="primary"):
             st.session_state.show_chart = False
             st.rerun()
     
@@ -561,7 +552,6 @@ if st.session_state.show_chart:
             st.metric("Close", f"${current['close']:.2f}")
     
     st.markdown("---")
-    # Stop auto-refresh when chart is open
     st.stop()
 
 # ============================================
@@ -637,7 +627,7 @@ if run_analysis:
             st.error(f"❌ Error: {str(e)}")
 
 # ============================================
-# RESULTS DISPLAY
+# RESULTS DISPLAY (Same as before)
 # ============================================
 if st.session_state.predictor is not None and st.session_state.predictions is not None:
     predictor = st.session_state.predictor
@@ -658,6 +648,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
         "🔮 Final Predictions"
     ])
     
+    # [REST OF THE TABS CODE REMAINS THE SAME AS PREVIOUS VERSION]
     # TAB 1: Trading Signals
     with tab1:
         st.markdown("### 🎯 Trading Signals & Recommendations")
@@ -729,35 +720,251 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                 
                 st.markdown("---")
     
-    # TAB 2: Summary (placeholder - add your existing code)
+    # TAB 2: SUMMARY (existing code)
     with tab2:
-        st.markdown("### 📈 Model Performance Summary")
-        st.info("Add your summary tab content here")
+        st.markdown("### 🏆 Best Models Performance")
+        
+        perf_data = []
+        for timeframe in ['4h', '1d', '1w']:
+            if timeframe in predictor.all_model_results:
+                best_model = predictor.best_models.get(timeframe, '')
+                if best_model and best_model in predictor.all_model_results[timeframe]:
+                    result = predictor.all_model_results[timeframe][best_model]
+                    perf_data.append({
+                        'Timeframe': timeframe.upper(),
+                        'Best Model': best_model,
+                        'R² Score': f"{result['r2']:.4f}",
+                        'MAE ($)': f"${result['mae']:.2f}",
+                        'RMSE ($)': f"${result['rmse']:.2f}",
+                        'Direction Acc': f"{result['direction_accuracy']:.2%}"
+                    })
+        
+        if perf_data:
+            df_perf = pd.DataFrame(perf_data)
+            st.dataframe(df_perf, use_container_width=True, hide_index=True)
+        
+        st.markdown("### 📊 Performance Visualization")
+        
+        fig = make_subplots(
+            rows=2, cols=2,
+            subplot_titles=('R² Score by Timeframe', 'MAE Comparison', 
+                          'Direction Accuracy', 'Best Model Distribution'),
+            specs=[[{'type': 'bar'}, {'type': 'bar'}],
+                   [{'type': 'bar'}, {'type': 'pie'}]]
+        )
+        
+        timeframes = []
+        r2_scores = []
+        mae_values = []
+        dir_acc = []
+        
+        for tf in ['4h', '1d', '1w']:
+            if tf in predictor.best_models:
+                best_model = predictor.best_models[tf]
+                result = predictor.all_model_results[tf][best_model]
+                timeframes.append(tf.upper())
+                r2_scores.append(result['r2'])
+                mae_values.append(result['mae'])
+                dir_acc.append(result['direction_accuracy'] * 100)
+        
+        fig.add_trace(
+            go.Bar(x=timeframes, y=r2_scores, name='R² Score',
+                   marker_color=['#2ecc71', '#3498db', '#9b59b6']),
+            row=1, col=1
+        )
+        
+        fig.add_trace(
+            go.Bar(x=timeframes, y=mae_values, name='MAE',
+                   marker_color=['#e74c3c', '#f39c12', '#1abc9c']),
+            row=1, col=2
+        )
+        
+        fig.add_trace(
+            go.Bar(x=timeframes, y=dir_acc, name='Accuracy (%)',
+                   marker_color=['#16a085', '#27ae60', '#2980b9']),
+            row=2, col=1
+        )
+        
+        model_names = [predictor.best_models.get(tf, 'N/A') 
+                      for tf in ['4h', '1d', '1w'] 
+                      if tf in predictor.best_models]
+        model_counts = {}
+        for model in model_names:
+            model_counts[model] = model_counts.get(model, 0) + 1
+        
+        fig.add_trace(
+            go.Pie(labels=list(model_counts.keys()), 
+                   values=list(model_counts.values())),
+            row=2, col=2
+        )
+        
+        fig.update_layout(height=800, showlegend=False, template='plotly_dark')
+        st.plotly_chart(fig, use_container_width=True)
     
-    # TAB 3-6: Predictions (placeholder - add your existing code)
-    with tab3:
-        st.markdown("### ⏰ 4H Predictions")
-        st.info("Add your 4H predictions tab content here")
+    # TAB 3-5: TIMEFRAME PREDICTIONS (existing code with pan enabled)
+    for tab, timeframe in zip([tab3, tab4, tab5], ['4h', '1d', '1w']):
+        with tab:
+            if timeframe not in all_predictions:
+                st.warning(f"No predictions for {timeframe}")
+                continue
+            
+            st.markdown(f"### 🎯 {timeframe.upper()} Predictions")
+            
+            pred_data = []
+            best_model = predictor.best_models.get(timeframe, '')
+            
+            if best_model and best_model in all_predictions[timeframe]:
+                predictions = all_predictions[timeframe][best_model][:7]
+                
+                for i, price in enumerate(predictions):
+                    if timeframe == '4h':
+                        period = f"{(i+1)*4}h"
+                    elif timeframe == '1d':
+                        period = f"Day {i+1}"
+                    else:
+                        period = f"Week {i+1}"
+                    
+                    change = ((price / predictor.reference_price - 1) * 100)
+                    
+                    pred_data.append({
+                        'Period': period,
+                        'Predicted Price': f"${price:.2f}",
+                        'Change': f"{change:+.2f}%",
+                        'Trend': '📈' if change > 0 else '📉' if change < 0 else '➡️'
+                    })
+            
+            if pred_data:
+                df_pred = pd.DataFrame(pred_data)
+                st.dataframe(df_pred, use_container_width=True, hide_index=True)
+                
+                fig = go.Figure()
+                
+                prices = [float(p['Predicted Price'].replace('$', '')) for p in pred_data]
+                periods = [p['Period'] for p in pred_data]
+                
+                fig.add_trace(go.Scatter(
+                    x=periods,
+                    y=prices,
+                    mode='lines+markers',
+                    name='Prediction',
+                    line=dict(color='#3498db', width=3),
+                    marker=dict(size=10)
+                ))
+                
+                fig.add_hline(
+                    y=predictor.reference_price,
+                    line_dash="dash",
+                    line_color="red",
+                    annotation_text=f"Current: ${predictor.reference_price:.2f}"
+                )
+                
+                fig.update_layout(
+                    title=f"{timeframe.upper()} Price Predictions",
+                    xaxis_title="Period",
+                    yaxis_title="Price ($)",
+                    template='plotly_dark',
+                    height=500,
+                    dragmode='pan'  # LEFT CLICK + DRAG = PAN
+                )
+                
+                fig.update_xaxes(fixedrange=False)
+                fig.update_yaxes(fixedrange=False)
+                
+                st.plotly_chart(fig, use_container_width=True, config={
+                    'scrollZoom': True,
+                    'displayModeBar': True,
+                    'displaylogo': False
+                })
     
-    with tab4:
-        st.markdown("### 📅 1D Predictions")
-        st.info("Add your 1D predictions tab content here")
-    
-    with tab5:
-        st.markdown("### 📆 1W Predictions")
-        st.info("Add your 1W predictions tab content here")
-    
+    # TAB 6: FINAL PREDICTIONS (existing code with pan enabled)
     with tab6:
-        st.markdown("### 🔮 Final Predictions")
-        st.info("Add your final predictions tab content here")
+        st.markdown("### 🎯 Final Predictions Summary")
+        
+        final_data = []
+        
+        for timeframe in ['4h', '1d', '1w']:
+            if timeframe not in all_predictions:
+                continue
+            
+            best_model = predictor.best_models.get(timeframe)
+            if not best_model or best_model not in all_predictions[timeframe]:
+                continue
+            
+            predictions = all_predictions[timeframe][best_model][:7]
+            
+            for i, price in enumerate(predictions):
+                if timeframe == '4h':
+                    period = f"{(i+1)*4} hours"
+                elif timeframe == '1d':
+                    period = f"Day {i+1}"
+                else:
+                    period = f"Week {i+1}"
+                
+                change = ((price / predictor.reference_price - 1) * 100)
+                
+                final_data.append({
+                    'Timeframe': timeframe.upper(),
+                    'Period': period,
+                    'Predicted Price': f"${price:.2f}",
+                    'Change': f"{change:+.2f}%",
+                    'Trend': '📈' if change > 0 else '📉'
+                })
+        
+        if final_data:
+            df_final = pd.DataFrame(final_data)
+            st.dataframe(df_final, use_container_width=True, hide_index=True)
+            
+            st.markdown("### 📊 All Timeframes Comparison")
+            
+            fig = go.Figure()
+            
+            for timeframe in ['4h', '1d', '1w']:
+                if timeframe in all_predictions:
+                    best_model = predictor.best_models.get(timeframe)
+                    if best_model:
+                        predictions = all_predictions[timeframe][best_model][:7]
+                        x = list(range(1, len(predictions) + 1))
+                        
+                        fig.add_trace(go.Scatter(
+                            x=x,
+                            y=predictions,
+                            mode='lines+markers',
+                            name=timeframe.upper(),
+                            line=dict(width=3),
+                            marker=dict(size=8)
+                        ))
+            
+            fig.add_hline(
+                y=predictor.reference_price,
+                line_dash="dash",
+                line_color="purple",
+                annotation_text=f"Current: ${predictor.reference_price:.2f}"
+            )
+            
+            fig.update_layout(
+                title="Final Price Predictions - All Timeframes",
+                xaxis_title="Period",
+                yaxis_title="Price ($)",
+                template='plotly_dark',
+                height=600,
+                dragmode='pan'  # LEFT CLICK + DRAG = PAN
+            )
+            
+            fig.update_xaxes(fixedrange=False)
+            fig.update_yaxes(fixedrange=False)
+            
+            st.plotly_chart(fig, use_container_width=True, config={
+                'scrollZoom': True,
+                'displayModeBar': True,
+                'displaylogo': False
+            })
     
-    # Stop auto-refresh when showing results
     st.stop()
 
 # ============================================
-# AUTO-REFRESH (only when not showing chart or results)
+# AUTO-REFRESH
 # ============================================
-if auto_refresh and not st.session_state.show_chart and st.session_state.predictor is None:
+if auto_refresh:
     time.sleep(1)
     st.rerun()
 
