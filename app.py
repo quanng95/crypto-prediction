@@ -16,11 +16,12 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom CSS - FIXED COLORS
+# Custom CSS - FIXED COLORS & FONT SIZE
 st.markdown("""
 <style>
     .main { 
-        background-color: #f5f6fa; 
+        background-color: #f5f6fa;
+        font-size: 16px !important;
     }
     
     /* Ticker styling */
@@ -35,48 +36,66 @@ st.markdown("""
     .ticker-symbol {
         color: #000000 !important;
         font-weight: bold;
-        font-size: 14px;
+        font-size: 16px;
         margin-bottom: 5px;
     }
     
     .ticker-price-up {
         color: #27ae60 !important;
         font-weight: bold;
-        font-size: 18px;
+        font-size: 20px;
     }
     
     .ticker-price-down {
         color: #e74c3c !important;
         font-weight: bold;
-        font-size: 18px;
+        font-size: 20px;
     }
     
     .ticker-change-up {
         color: #27ae60 !important;
-        font-size: 12px;
+        font-size: 14px;
     }
     
     .ticker-change-down {
         color: #e74c3c !important;
-        font-size: 12px;
+        font-size: 14px;
     }
     
     /* Control panel styling */
     .control-symbol {
         color: #000000 !important;
         font-weight: bold;
+        font-size: 14px;
     }
     
     .control-price-up {
         color: #27ae60 !important;
         font-weight: bold;
-        font-size: 24px;
+        font-size: 28px;
     }
     
     .control-price-down {
         color: #e74c3c !important;
         font-weight: bold;
-        font-size: 24px;
+        font-size: 28px;
+    }
+    
+    /* Increase all text size */
+    p, span, div {
+        font-size: 16px;
+    }
+    
+    h1 {
+        font-size: 42px !important;
+    }
+    
+    h2 {
+        font-size: 36px !important;
+    }
+    
+    h3 {
+        font-size: 28px !important;
     }
     
     /* Hide Streamlit branding */
@@ -85,7 +104,12 @@ st.markdown("""
     
     /* Metric styling */
     [data-testid="stMetricValue"] {
-        font-size: 20px;
+        font-size: 22px;
+    }
+    
+    /* Button styling */
+    .stButton button {
+        font-size: 15px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -93,7 +117,7 @@ st.markdown("""
 # Symbols
 SYMBOLS = ["ETHUSDT", "BTCUSDT", "BNBUSDT", "SOLUSDT", "ADAUSDT", "DOGEUSDT", "ARBUSDT", "PAXGUSDT"]
 
-# Session state
+# Session state initialization
 if 'last_update' not in st.session_state:
     st.session_state.last_update = time.time()
 if 'predictor' not in st.session_state:
@@ -104,8 +128,12 @@ if 'show_chart' not in st.session_state:
     st.session_state.show_chart = False
 if 'chart_symbol' not in st.session_state:
     st.session_state.chart_symbol = "ETHUSDT"
+if 'chart_interval' not in st.session_state:
+    st.session_state.chart_interval = "1h"
+if 'analysis_done' not in st.session_state:
+    st.session_state.analysis_done = False
 
-@st.cache_data(ttl=2)  # Cache 2 seconds for real-time updates
+@st.cache_data(ttl=1)  # Cache 1 second for real-time updates
 def get_ticker(symbol):
     """Get ticker from Binance"""
     try:
@@ -149,11 +177,6 @@ def get_klines(symbol, interval='1h', limit=200):
         st.error(f"Error: {e}")
         return None
 
-def show_candlestick_chart(symbol, interval='1h'):
-    """Show candlestick chart in modal"""
-    st.session_state.show_chart = True
-    st.session_state.chart_symbol = symbol
-
 # ============================================
 # HEADER
 # ============================================
@@ -164,70 +187,78 @@ col1, col2 = st.columns([5, 1])
 with col1:
     st.markdown("### Real-time Market Data")
 with col2:
-    auto_refresh = st.checkbox("Auto-refresh (2s)", value=True)
+    auto_refresh = st.checkbox("Auto-refresh (1s)", value=True, key="auto_refresh_toggle")
 
 # ============================================
-# TICKER BAR - FIXED COLORS
+# TICKER BAR - ONLY PRICES REFRESH
 # ============================================
 st.markdown("---")
 
-# Create 4 rows of 2 symbols each
-for row in range(0, len(SYMBOLS), 4):
-    ticker_cols = st.columns(4)
-    
-    for idx, symbol in enumerate(SYMBOLS[row:row+4]):
-        with ticker_cols[idx]:
-            ticker_data = get_ticker(symbol)
-            if ticker_data:
-                change_pct = ticker_data['change_percent']
-                is_up = change_pct >= 0
-                
-                # Color classes
-                price_class = "ticker-price-up" if is_up else "ticker-price-down"
-                change_class = "ticker-change-up" if is_up else "ticker-change-down"
-                arrow = "▲" if is_up else "▼"
-                
-                # HTML with proper colors
-                html = f"""
-                <div class="ticker-container" style="cursor: pointer;" onclick="alert('Click Show Chart button to view')">
-                    <div class="ticker-symbol">{symbol}</div>
-                    <div class="{price_class}">${ticker_data['price']:,.2f}</div>
-                    <div class="{change_class}">{arrow} {abs(change_pct):.2f}%</div>
-                </div>
-                """
-                st.markdown(html, unsafe_allow_html=True)
-                
-                # Add button to show chart
-                if st.button(f"📊 Chart", key=f"chart_{symbol}"):
-                    st.session_state.show_chart = True
-                    st.session_state.chart_symbol = symbol
+# Create ticker bar container
+ticker_container = st.container()
+
+with ticker_container:
+    # Create 2 rows of 4 symbols each
+    for row in range(0, len(SYMBOLS), 4):
+        ticker_cols = st.columns(4)
+        
+        for idx, symbol in enumerate(SYMBOLS[row:row+4]):
+            with ticker_cols[idx]:
+                ticker_data = get_ticker(symbol)
+                if ticker_data:
+                    change_pct = ticker_data['change_percent']
+                    is_up = change_pct >= 0
+                    
+                    # Color classes
+                    price_class = "ticker-price-up" if is_up else "ticker-price-down"
+                    change_class = "ticker-change-up" if is_up else "ticker-change-down"
+                    arrow = "▲" if is_up else "▼"
+                    
+                    # HTML with proper colors
+                    html = f"""
+                    <div class="ticker-container">
+                        <div class="ticker-symbol">{symbol}</div>
+                        <div class="{price_class}">${ticker_data['price']:,.2f}</div>
+                        <div class="{change_class}">{arrow} {abs(change_pct):.2f}%</div>
+                    </div>
+                    """
+                    st.markdown(html, unsafe_allow_html=True)
+                    
+                    # Add button to show chart
+                    if st.button(f"📊 Chart", key=f"chart_btn_{symbol}"):
+                        st.session_state.show_chart = True
+                        st.session_state.chart_symbol = symbol
 
 # ============================================
-# CANDLESTICK CHART MODAL
+# CANDLESTICK CHART MODAL - FIXED POSITION
 # ============================================
 if st.session_state.show_chart:
     st.markdown("---")
+    st.markdown("## 📈 Candlestick Chart")
     
     col1, col2, col3 = st.columns([2, 2, 1])
     
     with col1:
-        st.markdown(f"### 📈 {st.session_state.chart_symbol} Candlestick Chart")
+        st.markdown(f"### {st.session_state.chart_symbol}")
     
     with col2:
-        chart_interval = st.selectbox(
+        new_interval = st.selectbox(
             "Timeframe",
             ['15m', '1h', '4h', '1d'],
-            index=1,
-            key="chart_interval"
+            index=['15m', '1h', '4h', '1d'].index(st.session_state.chart_interval),
+            key="chart_interval_select"
         )
+        if new_interval != st.session_state.chart_interval:
+            st.session_state.chart_interval = new_interval
+            st.rerun()
     
     with col3:
-        if st.button("❌ Close Chart"):
+        if st.button("❌ Close Chart", key="close_chart_btn"):
             st.session_state.show_chart = False
             st.rerun()
     
     # Fetch and display chart
-    df = get_klines(st.session_state.chart_symbol, chart_interval, 200)
+    df = get_klines(st.session_state.chart_symbol, st.session_state.chart_interval, 200)
     
     if df is not None and len(df) > 0:
         # Create candlestick chart
@@ -236,7 +267,7 @@ if st.session_state.show_chart:
             shared_xaxes=True,
             vertical_spacing=0.03,
             row_heights=[0.7, 0.3],
-            subplot_titles=(f'{st.session_state.chart_symbol} - {chart_interval.upper()}', 'Volume')
+            subplot_titles=(f'{st.session_state.chart_symbol} - {st.session_state.chart_interval.upper()}', 'Volume')
         )
         
         # Candlestick
@@ -282,7 +313,7 @@ if st.session_state.show_chart:
         fig.update_yaxes(title_text="Price ($)", row=1, col=1)
         fig.update_yaxes(title_text="Volume", row=2, col=1)
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key="candlestick_chart")
         
         # Current stats
         current = df.iloc[-1]
@@ -313,13 +344,14 @@ with col2:
     timezone = st.selectbox(
         "🌍 Timezone",
         ["Asia/Ho_Chi_Minh", "America/New_York", "Europe/London", "Asia/Tokyo"],
-        index=0
+        index=0,
+        key="timezone_select"
     )
 
 with col3:
     st.write("")
     st.write("")
-    run_analysis = st.button("🚀 Run Analysis", type="primary", use_container_width=True)
+    run_analysis = st.button("🚀 Run Analysis", type="primary", use_container_width=True, key="run_analysis_btn")
 
 with col4:
     # Current price display with proper colors
@@ -333,7 +365,7 @@ with col4:
         <div style="background: white; padding: 10px; border-radius: 5px; margin-top: 25px;">
             <div class="control-symbol">{selected_symbol}</div>
             <div class="{price_class}">${current_ticker['price']:,.2f}</div>
-            <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 12px;">
+            <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">
                 {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
             </div>
         </div>
@@ -364,6 +396,7 @@ if run_analysis:
             # Store in session state
             st.session_state.predictor = predictor
             st.session_state.predictions = all_predictions
+            st.session_state.analysis_done = True
             
             time.sleep(1)
             progress_bar.empty()
@@ -373,18 +406,19 @@ if run_analysis:
             
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
+            st.session_state.analysis_done = False
 
 # ============================================
-# RESULTS DISPLAY - FIXED DUPLICATE
+# RESULTS DISPLAY - NO DUPLICATE
 # ============================================
-if st.session_state.predictor and st.session_state.predictions:
+if st.session_state.analysis_done and st.session_state.predictor and st.session_state.predictions:
     predictor = st.session_state.predictor
     all_predictions = st.session_state.predictions
     
     st.markdown("---")
     st.markdown("## 📊 Analysis Results")
     
-    # Single set of tabs (not duplicate)
+    # Single set of tabs
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📈 Summary",
         "⏰ 4H Predictions",
@@ -630,18 +664,18 @@ if st.session_state.predictor and st.session_state.predictions:
             st.plotly_chart(fig, use_container_width=True)
 
 # ============================================
-# AUTO-REFRESH (2 seconds)
+# AUTO-REFRESH (1 second) - ONLY TICKER PRICES
 # ============================================
 if auto_refresh:
-    time.sleep(2)
+    time.sleep(1)
     st.rerun()
 
 # Footer
 st.markdown("---")
 st.markdown(
-    "<div style='text-align: center; color: #7f8c8d;'>"
+    f"<div style='text-align: center; color: #7f8c8d; font-size: 14px;'>"
     f"🔮 Crypto Prediction | Last update: {datetime.now().strftime('%H:%M:%S')} | "
-    "Powered by Streamlit & Binance API"
-    "</div>",
+    f"Powered by Streamlit & Binance API"
+    f"</div>",
     unsafe_allow_html=True
 )
