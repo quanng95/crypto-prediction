@@ -5,6 +5,7 @@ from plotly.subplots import make_subplots
 import time
 import requests
 from datetime import datetime
+import numpy as np
 
 # Import predictor
 from eth import AdvancedETHPredictor
@@ -16,24 +17,26 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom CSS
+# Custom CSS - GRAY BOXES
 st.markdown("""
 <style>
     .main { 
-        background-color: #f5f6fa;
+        background-color: #1e1e1e;
         font-size: 16px !important;
     }
     
+    /* Gray ticker boxes */
     .ticker-container {
-        background-color: white;
+        background-color: #2d2d2d;
         padding: 15px;
         border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
         margin-bottom: 10px;
+        border: 1px solid #3d3d3d;
     }
     
     .ticker-symbol {
-        color: #000000 !important;
+        color: #ffffff !important;
         font-weight: bold;
         font-size: 16px;
         margin-bottom: 5px;
@@ -61,8 +64,17 @@ st.markdown("""
         font-size: 14px;
     }
     
+    /* Gray control price box */
+    .control-price-box {
+        background-color: #2d2d2d;
+        padding: 10px;
+        border-radius: 5px;
+        margin-top: 25px;
+        border: 1px solid #3d3d3d;
+    }
+    
     .control-symbol {
-        color: #000000 !important;
+        color: #ffffff !important;
         font-weight: bold;
         font-size: 14px;
     }
@@ -79,8 +91,34 @@ st.markdown("""
         font-size: 28px;
     }
     
-    p, span, div {
+    /* Trading signal boxes */
+    .signal-box {
+        background-color: #2d2d2d;
+        padding: 20px;
+        border-radius: 8px;
+        margin: 10px 0;
+        border: 2px solid #3d3d3d;
+    }
+    
+    .signal-long {
+        border-left: 4px solid #27ae60;
+    }
+    
+    .signal-short {
+        border-left: 4px solid #e74c3c;
+    }
+    
+    .signal-neutral {
+        border-left: 4px solid #95a5a6;
+    }
+    
+    p, span, div, label {
+        color: #e0e0e0;
         font-size: 16px;
+    }
+    
+    h1, h2, h3 {
+        color: #ffffff !important;
     }
     
     h1 {
@@ -100,10 +138,22 @@ st.markdown("""
     
     [data-testid="stMetricValue"] {
         font-size: 22px;
+        color: #e0e0e0;
     }
     
     .stButton button {
         font-size: 15px;
+    }
+    
+    /* Selectbox styling */
+    .stSelectbox > div > div {
+        background-color: #2d2d2d;
+        color: #e0e0e0;
+    }
+    
+    /* Dataframe styling */
+    [data-testid="stDataFrame"] {
+        background-color: #2d2d2d;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -167,6 +217,92 @@ def get_klines(symbol, interval='1h', limit=200):
         st.error(f"Error: {e}")
         return None
 
+def calculate_trading_signal(predictor, timeframe):
+    """Calculate trading signal based on predictions"""
+    if timeframe not in predictor.all_model_results:
+        return None
+    
+    best_model = predictor.best_models.get(timeframe)
+    if not best_model:
+        return None
+    
+    result = predictor.all_model_results[timeframe][best_model]
+    predictions = predictor.all_predictions.get(timeframe, {}).get(best_model, [])
+    
+    if not predictions or len(predictions) < 3:
+        return None
+    
+    current_price = predictor.reference_price
+    
+    # Calculate trend
+    short_term = predictions[:3]
+    mid_term = predictions[3:5] if len(predictions) > 3 else predictions[:3]
+    
+    avg_short = np.mean(short_term)
+    avg_mid = np.mean(mid_term)
+    
+    # Calculate percentage changes
+    short_change = ((avg_short / current_price) - 1) * 100
+    mid_change = ((avg_mid / current_price) - 1) * 100
+    
+    # Determine signal
+    if short_change > 2 and mid_change > 3:
+        signal = "LONG"
+        confidence = min(95, 60 + abs(short_change) * 5)
+        bull_prob = min(95, 55 + abs(short_change) * 3)
+        bear_prob = 100 - bull_prob
+    elif short_change < -2 and mid_change < -3:
+        signal = "SHORT"
+        confidence = min(95, 60 + abs(short_change) * 5)
+        bear_prob = min(95, 55 + abs(short_change) * 3)
+        bull_prob = 100 - bear_prob
+    else:
+        signal = "NEUTRAL"
+        confidence = 50
+        bull_prob = 50
+        bear_prob = 50
+    
+    # Calculate entry, stop loss, and take profits
+    if signal == "LONG":
+        entry = current_price * 0.995  # Entry 0.5% below current
+        stop_loss = entry * 0.97  # Stop loss 3% below entry
+        tp1 = entry * 1.02  # TP1: +2%
+        tp2 = entry * 1.05  # TP2: +5%
+        tp3 = entry * 1.10  # TP3: +10%
+    elif signal == "SHORT":
+        entry = current_price * 1.005  # Entry 0.5% above current
+        stop_loss = entry * 1.03  # Stop loss 3% above entry
+        tp1 = entry * 0.98  # TP1: -2%
+        tp2 = entry * 0.95  # TP2: -5%
+        tp3 = entry * 0.90  # TP3: -10%
+    else:
+        entry = current_price
+        stop_loss = current_price * 0.97
+        tp1 = current_price * 1.02
+        tp2 = current_price * 1.05
+        tp3 = current_price * 1.08
+    
+    # Calculate accuracy based on model metrics
+    accuracy = result['direction_accuracy'] * 100
+    r2_score = result['r2']
+    
+    return {
+        'signal': signal,
+        'confidence': confidence,
+        'bull_prob': bull_prob,
+        'bear_prob': bear_prob,
+        'entry': entry,
+        'stop_loss': stop_loss,
+        'tp1': tp1,
+        'tp2': tp2,
+        'tp3': tp3,
+        'accuracy': accuracy,
+        'r2_score': r2_score,
+        'current_price': current_price,
+        'short_term_change': short_change,
+        'mid_term_change': mid_change
+    }
+
 # ============================================
 # HEADER
 # ============================================
@@ -179,7 +315,7 @@ with col2:
     auto_refresh = st.checkbox("Auto-refresh (1s)", value=True)
 
 # ============================================
-# TICKER BAR
+# TICKER BAR - GRAY BOXES
 # ============================================
 st.markdown("---")
 
@@ -212,7 +348,7 @@ for row in range(0, len(SYMBOLS), 4):
                     st.rerun()
 
 # ============================================
-# CANDLESTICK CHART - FIXED CLOSE BUTTON
+# CANDLESTICK CHART - PAN WITH LEFT CLICK + DRAG
 # ============================================
 if st.session_state.show_chart:
     st.markdown("---")
@@ -276,18 +412,17 @@ if st.session_state.show_chart:
             row=2, col=1
         )
         
-        # ENABLE ZOOM & PAN
+        # PAN WITH LEFT CLICK + DRAG
         fig.update_layout(
             height=700,
             template='plotly_dark',
             xaxis_rangeslider_visible=False,
             showlegend=False,
             hovermode='x unified',
-            dragmode='zoom',  # Enable zoom by default
-            modebar_add=['pan2d', 'zoom2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d']
+            dragmode='pan',  # LEFT CLICK + DRAG = PAN
+            modebar_add=['zoom2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d']
         )
         
-        # Enable drag to zoom and scroll to zoom
         fig.update_xaxes(fixedrange=False)
         fig.update_yaxes(fixedrange=False)
         
@@ -296,10 +431,10 @@ if st.session_state.show_chart:
         fig.update_yaxes(title_text="Volume", row=2, col=1)
         
         st.plotly_chart(fig, use_container_width=True, config={
-            'scrollZoom': True,
+            'scrollZoom': True,  # Scroll to zoom
             'displayModeBar': True,
-            'modeBarButtonsToAdd': ['drawline', 'drawopenpath', 'eraseshape'],
-            'displaylogo': False
+            'displaylogo': False,
+            'modeBarButtonsToRemove': ['select2d', 'lasso2d']
         })
         
         current = df.iloc[-1]
@@ -315,11 +450,10 @@ if st.session_state.show_chart:
             st.metric("Close", f"${current['close']:.2f}")
     
     st.markdown("---")
-    # STOP AUTO-REFRESH when chart is open
     st.stop()
 
 # ============================================
-# CONTROL PANEL
+# CONTROL PANEL - GRAY BOX
 # ============================================
 st.markdown("### 🎛️ Control Panel")
 
@@ -348,7 +482,7 @@ with col4:
         price_class = "control-price-up" if is_up else "control-price-down"
         
         st.markdown(f"""
-        <div style="background: white; padding: 10px; border-radius: 5px; margin-top: 25px;">
+        <div class="control-price-box">
             <div class="control-symbol">{selected_symbol}</div>
             <div class="{price_class}">${current_ticker['price']:,.2f}</div>
             <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">
@@ -376,6 +510,9 @@ if run_analysis:
             progress_bar.progress(100)
             status_text.text("✅ Analysis complete!")
             
+            # Store predictions in predictor for signal calculation
+            predictor.all_predictions = all_predictions
+            
             st.session_state.predictor = predictor
             st.session_state.predictions = all_predictions
             
@@ -389,24 +526,104 @@ if run_analysis:
             st.error(f"❌ Error: {str(e)}")
 
 # ============================================
-# RESULTS DISPLAY - ONLY ONCE
+# RESULTS DISPLAY
 # ============================================
 if st.session_state.predictor is not None and st.session_state.predictions is not None:
     predictor = st.session_state.predictor
     all_predictions = st.session_state.predictions
     
+    # Store predictions for signal calculation
+    if not hasattr(predictor, 'all_predictions'):
+        predictor.all_predictions = all_predictions
+    
     st.markdown("---")
     st.markdown("## 📊 Analysis Results")
     
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    # ADDED TRADING SIGNALS TAB
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "🎯 Trading Signals",
         "📈 Summary",
         "⏰ 4H Predictions",
         "📅 1D Predictions",
         "📆 1W Predictions",
-        "🎯 Final Predictions"
+        "🔮 Final Predictions"
     ])
     
+    # TAB 1: TRADING SIGNALS
     with tab1:
+        st.markdown("### 🎯 Trading Signals & Recommendations")
+        
+        for timeframe in ['4h', '1d', '1w']:
+            signal_data = calculate_trading_signal(predictor, timeframe)
+            
+            if signal_data:
+                signal = signal_data['signal']
+                
+                # Signal box styling
+                if signal == "LONG":
+                    box_class = "signal-box signal-long"
+                    signal_emoji = "📈"
+                    signal_color = "#27ae60"
+                elif signal == "SHORT":
+                    box_class = "signal-box signal-short"
+                    signal_emoji = "📉"
+                    signal_color = "#e74c3c"
+                else:
+                    box_class = "signal-box signal-neutral"
+                    signal_emoji = "➡️"
+                    signal_color = "#95a5a6"
+                
+                st.markdown(f"""
+                <div class="{box_class}">
+                    <h3 style="color: {signal_color};">{signal_emoji} {timeframe.upper()} - {signal} Signal</h3>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.markdown("#### 📊 Market Sentiment")
+                    st.metric("Confidence", f"{signal_data['confidence']:.1f}%")
+                    st.metric("Bull Probability", f"{signal_data['bull_prob']:.1f}%", 
+                             delta=f"{signal_data['bull_prob'] - 50:+.1f}%")
+                    st.metric("Bear Probability", f"{signal_data['bear_prob']:.1f}%",
+                             delta=f"{signal_data['bear_prob'] - 50:+.1f}%")
+                
+                with col2:
+                    st.markdown("#### 💰 Entry & Risk Management")
+                    st.metric("Current Price", f"${signal_data['current_price']:.2f}")
+                    st.metric("Entry Price", f"${signal_data['entry']:.2f}",
+                             delta=f"{((signal_data['entry']/signal_data['current_price']-1)*100):+.2f}%")
+                    st.metric("Stop Loss", f"${signal_data['stop_loss']:.2f}",
+                             delta=f"{((signal_data['stop_loss']/signal_data['entry']-1)*100):+.2f}%",
+                             delta_color="inverse")
+                
+                with col3:
+                    st.markdown("#### 🎯 Take Profit Targets")
+                    st.metric("TP1 (Conservative)", f"${signal_data['tp1']:.2f}",
+                             delta=f"{((signal_data['tp1']/signal_data['entry']-1)*100):+.2f}%")
+                    st.metric("TP2 (Moderate)", f"${signal_data['tp2']:.2f}",
+                             delta=f"{((signal_data['tp2']/signal_data['entry']-1)*100):+.2f}%")
+                    st.metric("TP3 (Aggressive)", f"${signal_data['tp3']:.2f}",
+                             delta=f"{((signal_data['tp3']/signal_data['entry']-1)*100):+.2f}%")
+                
+                # Accuracy metrics
+                st.markdown("#### 📈 Model Performance")
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    st.metric("Direction Accuracy", f"{signal_data['accuracy']:.1f}%")
+                with col2:
+                    st.metric("R² Score", f"{signal_data['r2_score']:.4f}")
+                with col3:
+                    st.metric("Short-term Trend", f"{signal_data['short_term_change']:+.2f}%")
+                with col4:
+                    st.metric("Mid-term Trend", f"{signal_data['mid_term_change']:+.2f}%")
+                
+                st.markdown("---")
+    
+    # TAB 2: SUMMARY (existing code)
+    with tab2:
         st.markdown("### 🏆 Best Models Performance")
         
         perf_data = []
@@ -483,10 +700,11 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
             row=2, col=2
         )
         
-        fig.update_layout(height=800, showlegend=False, template='plotly_white')
+        fig.update_layout(height=800, showlegend=False, template='plotly_dark')
         st.plotly_chart(fig, use_container_width=True)
     
-    for tab, timeframe in zip([tab2, tab3, tab4], ['4h', '1d', '1w']):
+    # TAB 3-5: TIMEFRAME PREDICTIONS (existing code with pan enabled)
+    for tab, timeframe in zip([tab3, tab4, tab5], ['4h', '1d', '1w']):
         with tab:
             if timeframe not in all_predictions:
                 st.warning(f"No predictions for {timeframe}")
@@ -542,14 +760,13 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                     annotation_text=f"Current: ${predictor.reference_price:.2f}"
                 )
                 
-                # ENABLE ZOOM & PAN
                 fig.update_layout(
                     title=f"{timeframe.upper()} Price Predictions",
                     xaxis_title="Period",
                     yaxis_title="Price ($)",
-                    template='plotly_white',
+                    template='plotly_dark',
                     height=500,
-                    dragmode='zoom'
+                    dragmode='pan'  # LEFT CLICK + DRAG = PAN
                 )
                 
                 fig.update_xaxes(fixedrange=False)
@@ -561,7 +778,8 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                     'displaylogo': False
                 })
     
-    with tab5:
+    # TAB 6: FINAL PREDICTIONS (existing code with pan enabled)
+    with tab6:
         st.markdown("### 🎯 Final Predictions Summary")
         
         final_data = []
@@ -625,14 +843,13 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                 annotation_text=f"Current: ${predictor.reference_price:.2f}"
             )
             
-            # ENABLE ZOOM & PAN
             fig.update_layout(
                 title="Final Price Predictions - All Timeframes",
                 xaxis_title="Period",
                 yaxis_title="Price ($)",
-                template='plotly_white',
+                template='plotly_dark',
                 height=600,
-                dragmode='zoom'
+                dragmode='pan'  # LEFT CLICK + DRAG = PAN
             )
             
             fig.update_xaxes(fixedrange=False)
@@ -644,7 +861,6 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                 'displaylogo': False
             })
     
-    # STOP AUTO-REFRESH when showing results
     st.stop()
 
 # ============================================
