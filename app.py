@@ -6,6 +6,10 @@ import time
 import requests
 from datetime import datetime
 import numpy as np
+from streamlit_autorefresh import st_autorefresh
+
+# Import WebSocket handler
+from websocket_handler import BinanceWebSocket
 
 # Import predictor
 from eth import AdvancedETHPredictor
@@ -48,88 +52,6 @@ st.markdown("""
         font-size: 18px;
         margin-top: 10px;
         opacity: 0.9;
-    }
-    
-    /* Ticker carousel container */
-    .ticker-carousel {
-        background-color: #2d2d2d;
-        padding: 20px;
-        border-radius: 10px;
-        margin-bottom: 20px;
-        border: 1px solid #3d3d3d;
-    }
-    
-    .ticker-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 15px;
-    }
-    
-    /* Carousel buttons */
-    .carousel-btn {
-        background-color: #667eea;
-        color: white;
-        border: none;
-        padding: 10px 15px;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 20px;
-        font-weight: bold;
-        transition: all 0.3s;
-    }
-    
-    .carousel-btn:hover {
-        background-color: #764ba2;
-        transform: scale(1.1);
-    }
-    
-    /* Gray ticker boxes - CLICKABLE */
-    .ticker-container {
-        background-color: #2d2d2d;
-        padding: 15px;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-        border: 1px solid #3d3d3d;
-        cursor: pointer;
-        transition: all 0.3s;
-        flex: 1;
-    }
-    
-    .ticker-container:hover {
-        background-color: #3d3d3d;
-        border-color: #667eea;
-        transform: translateY(-3px);
-        box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
-    }
-    
-    .ticker-symbol {
-        color: #ffffff !important;
-        font-weight: bold !important;
-        font-size: 16px !important;
-        margin-bottom: 5px !important;
-    }
-    
-    .ticker-price-up {
-        color: #27ae60 !important;
-        font-weight: bold;
-        font-size: 20px;
-    }
-    
-    .ticker-price-down {
-        color: #e74c3c !important;
-        font-weight: bold;
-        font-size: 20px;
-    }
-    
-    .ticker-change-up {
-        color: #27ae60 !important;
-        font-size: 14px;
-    }
-    
-    .ticker-change-down {
-        color: #e74c3c !important;
-        font-size: 14px;
     }
     
     /* Control price box */
@@ -257,9 +179,15 @@ if 'predictions' not in st.session_state:
 if 'ticker_start_index' not in st.session_state:
     st.session_state.ticker_start_index = 0
 
-@st.cache_data(ttl=1)
+# Initialize WebSocket
+if 'ws_handler' not in st.session_state:
+    st.session_state.ws_handler = BinanceWebSocket()
+    st.session_state.ws_handler.start(SYMBOLS)
+    print("🚀 WebSocket initialized")
+
+@st.cache_data(ttl=5)
 def get_ticker(symbol):
-    """Get ticker from Binance"""
+    """Get ticker from Binance REST API (fallback)"""
     try:
         url = f"https://api.binance.com/api/v3/ticker/24hr"
         response = requests.get(url, params={'symbol': symbol}, timeout=5)
@@ -273,6 +201,17 @@ def get_ticker(symbol):
         }
     except:
         return None
+
+def get_ticker_realtime(symbol):
+    """Get ticker from WebSocket (real-time) with REST API fallback"""
+    data = st.session_state.ws_handler.get_price(symbol)
+    
+    # Check if data is fresh (< 5 seconds old)
+    if data and (time.time() - data['timestamp']) < 5:
+        return data
+    
+    # Fallback to REST API
+    return get_ticker(symbol)
 
 @st.cache_data(ttl=60)
 def get_klines(symbol, interval='1h', limit=200):
@@ -392,63 +331,66 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Auto-refresh toggle (compact)
-col1, col2 = st.columns([6, 1])
-with col2:
-    auto_refresh = st.checkbox("Auto (1s)", value=True)
-
 # ============================================
-# TICKER CAROUSEL - ONE ROW WITH < >
+# TICKER CAROUSEL - REAL-TIME WITH FRAGMENT
 # ============================================
-st.markdown("---")
-
-# Show 4 symbols at a time
-visible_count = 4
-start_idx = st.session_state.ticker_start_index
-end_idx = start_idx + visible_count
-
-# Navigation buttons and tickers in one row
-nav_col1, *ticker_cols, nav_col2 = st.columns([1, 2, 2, 2, 2, 1])
-
-# Previous button
-with nav_col1:
-    if st.button("◀", key="prev_btn", help="Previous symbols"):
-        if st.session_state.ticker_start_index > 0:
-            st.session_state.ticker_start_index -= visible_count
-            st.rerun()
-
-# Display tickers
-for idx, col in enumerate(ticker_cols):
-    symbol_idx = start_idx + idx
-    if symbol_idx < len(SYMBOLS):
-        symbol = SYMBOLS[symbol_idx]
-        
-        with col:
-            ticker_data = get_ticker(symbol)
-            if ticker_data:
-                change_pct = ticker_data['change_percent']
-                is_up = change_pct >= 0
+@st.fragment
+def ticker_carousel():
+    """Ticker carousel that auto-refreshes independently"""
+    
+    # Auto-refresh this fragment only (every 500ms)
+    count = st_autorefresh(interval=500, limit=None, key="ticker_refresh")
+    
+    st.markdown("---")
+    
+    visible_count = 4
+    start_idx = st.session_state.ticker_start_index
+    end_idx = start_idx + visible_count
+    
+    # Navigation buttons and tickers in one row
+    nav_col1, *ticker_cols, nav_col2 = st.columns([1, 2, 2, 2, 2, 1])
+    
+    # Previous button
+    with nav_col1:
+        if st.button("◀", key=f"prev_btn_{count}", help="Previous symbols"):
+            if st.session_state.ticker_start_index > 0:
+                st.session_state.ticker_start_index -= visible_count
+                st.rerun()
+    
+    # Display tickers
+    for idx, col in enumerate(ticker_cols):
+        symbol_idx = start_idx + idx
+        if symbol_idx < len(SYMBOLS):
+            symbol = SYMBOLS[symbol_idx]
+            
+            with col:
+                # Get real-time data from WebSocket
+                ticker_data = get_ticker_realtime(symbol)
                 
-                price_class = "ticker-price-up" if is_up else "ticker-price-down"
-                change_class = "ticker-change-up" if is_up else "ticker-change-down"
-                arrow = "▲" if is_up else "▼"
-                
-                # CLICKABLE TICKER - No button, click on box
-                if st.button(
-                    f"{symbol}\n${ticker_data['price']:,.2f}\n{arrow} {abs(change_pct):.2f}%",
-                    key=f"ticker_{symbol}_{symbol_idx}",
-                    use_container_width=True
-                ):
-                    st.session_state.show_chart = True
-                    st.session_state.chart_symbol = symbol
-                    st.rerun()
+                if ticker_data:
+                    change_pct = ticker_data['change_percent']
+                    is_up = change_pct >= 0
+                    
+                    # Clickable ticker button
+                    if st.button(
+                        f"**{symbol}**\n\n${ticker_data['price']:,.2f}\n\n{'▲' if is_up else '▼'} {abs(change_pct):.2f}%",
+                        key=f"ticker_{symbol}_{count}",
+                        use_container_width=True,
+                        type="secondary"
+                    ):
+                        st.session_state.show_chart = True
+                        st.session_state.chart_symbol = symbol
+                        st.rerun()
+    
+    # Next button
+    with nav_col2:
+        if st.button("▶", key=f"next_btn_{count}", help="Next symbols"):
+            if st.session_state.ticker_start_index + visible_count < len(SYMBOLS):
+                st.session_state.ticker_start_index += visible_count
+                st.rerun()
 
-# Next button
-with nav_col2:
-    if st.button("▶", key="next_btn", help="Next symbols"):
-        if st.session_state.ticker_start_index + visible_count < len(SYMBOLS):
-            st.session_state.ticker_start_index += visible_count
-            st.rerun()
+# Call ticker carousel fragment
+ticker_carousel()
 
 # ============================================
 # CANDLESTICK CHART
@@ -577,7 +519,8 @@ with col3:
     run_analysis = st.button("🚀 Run Analysis", type="primary", use_container_width=True)
 
 with col4:
-    current_ticker = get_ticker(selected_symbol)
+    # Get real-time price for control panel
+    current_ticker = get_ticker_realtime(selected_symbol)
     if current_ticker:
         change_pct = current_ticker['change_percent']
         is_up = change_pct >= 0
@@ -627,7 +570,7 @@ if run_analysis:
             st.error(f"❌ Error: {str(e)}")
 
 # ============================================
-# RESULTS DISPLAY (Same as before)
+# RESULTS DISPLAY
 # ============================================
 if st.session_state.predictor is not None and st.session_state.predictions is not None:
     predictor = st.session_state.predictor
@@ -648,7 +591,6 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
         "🔮 Final Predictions"
     ])
     
-    # [REST OF THE TABS CODE REMAINS THE SAME AS PREVIOUS VERSION]
     # TAB 1: Trading Signals
     with tab1:
         st.markdown("### 🎯 Trading Signals & Recommendations")
@@ -720,7 +662,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                 
                 st.markdown("---")
     
-    # TAB 2: SUMMARY (existing code)
+    # TAB 2: Summary
     with tab2:
         st.markdown("### 🏆 Best Models Performance")
         
@@ -801,7 +743,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
         fig.update_layout(height=800, showlegend=False, template='plotly_dark')
         st.plotly_chart(fig, use_container_width=True)
     
-    # TAB 3-5: TIMEFRAME PREDICTIONS (existing code with pan enabled)
+    # TAB 3-5: Timeframe Predictions
     for tab, timeframe in zip([tab3, tab4, tab5], ['4h', '1d', '1w']):
         with tab:
             if timeframe not in all_predictions:
@@ -864,7 +806,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                     yaxis_title="Price ($)",
                     template='plotly_dark',
                     height=500,
-                    dragmode='pan'  # LEFT CLICK + DRAG = PAN
+                    dragmode='pan'
                 )
                 
                 fig.update_xaxes(fixedrange=False)
@@ -876,7 +818,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                     'displaylogo': False
                 })
     
-    # TAB 6: FINAL PREDICTIONS (existing code with pan enabled)
+    # TAB 6: Final Predictions
     with tab6:
         st.markdown("### 🎯 Final Predictions Summary")
         
@@ -947,7 +889,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                 yaxis_title="Price ($)",
                 template='plotly_dark',
                 height=600,
-                dragmode='pan'  # LEFT CLICK + DRAG = PAN
+                dragmode='pan'
             )
             
             fig.update_xaxes(fixedrange=False)
@@ -958,22 +900,22 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                 'displayModeBar': True,
                 'displaylogo': False
             })
-    
-    st.stop()
-
-# ============================================
-# AUTO-REFRESH
-# ============================================
-if auto_refresh:
-    time.sleep(1)
-    st.rerun()
 
 # Footer
 st.markdown("---")
 st.markdown(
     f"<div style='text-align: center; color: #7f8c8d; font-size: 14px;'>"
     f"🔮 Crypto Prediction | Last update: {datetime.now().strftime('%H:%M:%S')} | "
-    f"Powered by Streamlit & Binance API"
+    f"Powered by Streamlit & Binance WebSocket"
     f"</div>",
     unsafe_allow_html=True
 )
+
+# Cleanup WebSocket on app close
+import atexit
+def cleanup():
+    if 'ws_handler' in st.session_state:
+        st.session_state.ws_handler.stop()
+        print("🛑 WebSocket stopped")
+
+atexit.register(cleanup)
