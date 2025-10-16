@@ -478,8 +478,8 @@ with col2:
         st.rerun()
 
 with col3:
-    # Thêm label ẩn để cân bằng
-    st.markdown('<div style="height: 33px;"></div>', unsafe_allow_html=True)
+    # Thêm label giống col1, col2 để căn chỉnh
+    st.markdown('<p style="color: transparent; margin-bottom: 8px;">.</p>', unsafe_allow_html=True)
     if st.button(
         "🚀 Run Analysis", 
         type="primary", 
@@ -490,8 +490,8 @@ with col3:
         st.rerun()
 
 with col4:
-    # Thêm label ẩn để cân bằng với các cột khác
-    st.markdown('<div style="height: 33px; margin-bottom: 8px;"></div>', unsafe_allow_html=True)
+    # Thêm label giống col1, col2 để căn chỉnh
+    st.markdown('<p style="color: transparent; margin-bottom: 8px;">.</p>', unsafe_allow_html=True)
     realtime_price_display()
 
 # ============================================
