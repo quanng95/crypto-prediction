@@ -13,7 +13,6 @@ import ta
 from datetime import datetime, timedelta
 import pytz
 import warnings
-import yfinance as yf  # THÊM IMPORT
 warnings.filterwarnings('ignore')
 
 class AdvancedETHPredictor:
@@ -36,40 +35,15 @@ class AdvancedETHPredictor:
         if self.log_callback:
             self.log_callback(message)
     
-    def is_forex_symbol(self, symbol):
-        """Check if symbol is forex (not crypto)"""
-        forex_symbols = ['XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY']
-        return symbol in forex_symbols
-    
-    def get_yfinance_symbol(self, symbol):
-        """Convert symbol to yfinance format"""
-        symbol_map = {
-            'XAUUSD': 'GC=F',  # Gold Futures
-            'EURUSD': 'EURUSD=X',
-            'GBPUSD': 'GBPUSD=X',
-            'USDJPY': 'USDJPY=X'
-        }
-        return symbol_map.get(symbol, symbol)
-    
     def get_current_price(self, symbol="ETHUSDT"):
         """Get current real-time price"""
         try:
-            if self.is_forex_symbol(symbol):
-                # Use yfinance for forex
-                yf_symbol = self.get_yfinance_symbol(symbol)
-                ticker = yf.Ticker(yf_symbol)
-                data = ticker.history(period='1d', interval='1m')
-                if not data.empty:
-                    return float(data['Close'].iloc[-1])
-                return None
-            else:
-                # Use Binance for crypto
-                url = f"{self.base_url}/ticker/price"
-                params = {'symbol': symbol}
-                response = requests.get(url, params=params, timeout=5)
-                response.raise_for_status()
-                data = response.json()
-                return float(data['price'])
+            url = f"{self.base_url}/ticker/price"
+            params = {'symbol': symbol}
+            response = requests.get(url, params=params, timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            return float(data['price'])
         except Exception as e:
             self.log(f"Error getting current price for {symbol}: {e}")
             return None
@@ -77,49 +51,19 @@ class AdvancedETHPredictor:
     def get_24h_ticker(self, symbol="ETHUSDT"):
         """Get 24h ticker data"""
         try:
-            if self.is_forex_symbol(symbol):
-                # Use yfinance for forex
-                yf_symbol = self.get_yfinance_symbol(symbol)
-                ticker = yf.Ticker(yf_symbol)
-                
-                # Get 2 days of data to calculate 24h change
-                data = ticker.history(period='2d', interval='1h')
-                
-                if len(data) < 2:
-                    return None
-                
-                current_price = float(data['Close'].iloc[-1])
-                prev_price = float(data['Close'].iloc[0])
-                high_24h = float(data['High'].tail(24).max())
-                low_24h = float(data['Low'].tail(24).min())
-                volume_24h = float(data['Volume'].tail(24).sum())
-                
-                change = current_price - prev_price
-                change_percent = (change / prev_price * 100) if prev_price != 0 else 0
-                
-                return {
-                    'price': current_price,
-                    'change': change,
-                    'change_percent': change_percent,
-                    'high': high_24h,
-                    'low': low_24h,
-                    'volume': volume_24h
-                }
-            else:
-                # Use Binance for crypto
-                url = f"{self.base_url}/ticker/24hr"
-                params = {'symbol': symbol}
-                response = requests.get(url, params=params, timeout=5)
-                response.raise_for_status()
-                data = response.json()
-                return {
-                    'price': float(data['lastPrice']),
-                    'change': float(data['priceChange']),
-                    'change_percent': float(data['priceChangePercent']),
-                    'high': float(data['highPrice']),
-                    'low': float(data['lowPrice']),
-                    'volume': float(data['volume'])
-                }
+            url = f"{self.base_url}/ticker/24hr"
+            params = {'symbol': symbol}
+            response = requests.get(url, params=params, timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            return {
+                'price': float(data['lastPrice']),
+                'change': float(data['priceChange']),
+                'change_percent': float(data['priceChangePercent']),
+                'high': float(data['highPrice']),
+                'low': float(data['lowPrice']),
+                'volume': float(data['volume'])
+            }
         except Exception as e:
             self.log(f"Error getting 24h ticker for {symbol}: {e}")
             return None
@@ -129,86 +73,28 @@ class AdvancedETHPredictor:
         self.log(f"Fetching {symbol} {interval} data...")
         
         try:
-            if self.is_forex_symbol(symbol):
-                # Use yfinance for forex
-                yf_symbol = self.get_yfinance_symbol(symbol)
-                
-                # Map interval to yfinance period
-                period_map = {
-                    '4h': '60d',
-                    '1d': '2y',
-                    '1w': '5y'
-                }
-                interval_map = {
-                    '4h': '1h',
-                    '1d': '1d',
-                    '1w': '1wk'
-                }
-                
-                period = period_map.get(interval, '2y')
-                yf_interval = interval_map.get(interval, '1d')
-                
-                ticker = yf.Ticker(yf_symbol)
-                data = ticker.history(period=period, interval=yf_interval)
-                
-                if data.empty:
-                    self.log(f"❌ No data for {symbol}")
-                    return None
-                
-                # Convert to Binance-like format
-                df = pd.DataFrame({
-                    'open_time': [0] * len(data),
-                    'open': data['Open'].values,
-                    'high': data['High'].values,
-                    'low': data['Low'].values,
-                    'close': data['Close'].values,
-                    'volume': data['Volume'].values,
-                    'close_time': [0] * len(data),
-                    'quote_asset_volume': [0] * len(data),
-                    'number_of_trades': [0] * len(data),
-                    'taker_buy_base_asset_volume': [0] * len(data),
-                    'taker_buy_quote_asset_volume': [0] * len(data),
-                    'ignore': [0] * len(data),
-                    'datetime': data.index
-                })
-                
-                # Resample to get exact number of candles
-                if interval == '4h':
-                    df = df.tail(300)
-                elif interval == '1d':
-                    df = df.tail(500)
-                else:
-                    df = df.tail(150)
-                
-                df = df.reset_index(drop=True)
-                
-                self.log(f"✅ Loaded {len(df)} candles for {symbol}")
-                return df
-                
-            else:
-                # Use Binance for crypto
-                url = f"{self.base_url}/klines"
-                params = {'symbol': symbol, 'interval': interval, 'limit': limit}
-                
-                response = requests.get(url, params=params)
-                response.raise_for_status()
-                data = response.json()
-                
-                df = pd.DataFrame(data, columns=[
-                    'open_time', 'open', 'high', 'low', 'close', 'volume',
-                    'close_time', 'quote_asset_volume', 'number_of_trades',
-                    'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'
-                ])
-                
-                numeric_columns = ['open', 'high', 'low', 'close', 'volume']
-                for col in numeric_columns:
-                    df[col] = pd.to_numeric(df[col])
-                
-                df['datetime'] = pd.to_datetime(df['open_time'], unit='ms')
-                df = df.sort_values('datetime').reset_index(drop=True)
-                
-                self.log(f"✅ Loaded {len(df)} candles")
-                return df
+            url = f"{self.base_url}/klines"
+            params = {'symbol': symbol, 'interval': interval, 'limit': limit}
+            
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+            
+            df = pd.DataFrame(data, columns=[
+                'open_time', 'open', 'high', 'low', 'close', 'volume',
+                'close_time', 'quote_asset_volume', 'number_of_trades',
+                'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'
+            ])
+            
+            numeric_columns = ['open', 'high', 'low', 'close', 'volume']
+            for col in numeric_columns:
+                df[col] = pd.to_numeric(df[col])
+            
+            df['datetime'] = pd.to_datetime(df['open_time'], unit='ms')
+            df = df.sort_values('datetime').reset_index(drop=True)
+            
+            self.log(f"✅ Loaded {len(df)} candles")
+            return df
                 
         except Exception as e:
             self.log(f"❌ Error fetching data for {symbol}: {e}")
@@ -659,7 +545,7 @@ class AdvancedETHPredictor:
     
     def run_analysis(self, symbol="ETHUSDT"):
         """Run complete analysis"""
-        self.log("🚀 Starting Advanced ETH Prediction Analysis")
+        self.log("🚀 Starting Advanced Crypto Prediction Analysis")
         self.log("="*60)
         
         # Fetch data

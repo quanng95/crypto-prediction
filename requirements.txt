@@ -1,21 +1,10 @@
-# Core
 streamlit==1.39.0
 pandas==2.2.3
 numpy==1.26.4
-
-# ML
 scikit-learn==1.5.2
-
-# Technical Analysis
 ta==0.11.0
-
-# Plotting
-plotly==5.24.1
-matplotlib==3.9.2
-
-# API
 requests==2.32.3
+plotly==5.24.1
 python-binance==1.0.19
-
-# Utils
 pytz==2024.1
+matplotlib==3.9.2
