@@ -417,7 +417,7 @@ with nav_col1:
             st.session_state.ticker_start_index -= visible_count
             st.rerun()
 
-# Display tickers
+# Display tickers with colored prices and changes
 for idx, col in enumerate(ticker_cols):
     symbol_idx = start_idx + idx
     if symbol_idx < len(SYMBOLS):
@@ -429,16 +429,25 @@ for idx, col in enumerate(ticker_cols):
                 change_pct = ticker_data['change_percent']
                 is_up = change_pct >= 0
                 
-                price_class = "ticker-price-up" if is_up else "ticker-price-down"
-                change_class = "ticker-change-up" if is_up else "ticker-change-down"
+                # Color based on price change
+                color = "#27ae60" if is_up else "#e74c3c"
                 arrow = "▲" if is_up else "▼"
                 
-                # CLICKABLE TICKER - No button, click on box
-                if st.button(
-                    f"{symbol}\n${ticker_data['price']:,.2f}\n{arrow} {abs(change_pct):.2f}%",
-                    key=f"ticker_{symbol}_{symbol_idx}",
-                    use_container_width=True
-                ):
+                # Create clickable ticker box with colored price and change
+                st.markdown(f"""
+                <div class="ticker-container" style="text-align: center;">
+                    <div class="ticker-symbol">{symbol}</div>
+                    <div style="color: {color}; font-weight: bold; font-size: 20px; margin: 5px 0;">
+                        ${ticker_data['price']:,.2f}
+                    </div>
+                    <div style="color: {color}; font-size: 14px;">
+                        {arrow} {abs(change_pct):.2f}%
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Invisible button overlay for click detection
+                if st.button("📊", key=f"ticker_{symbol}_{symbol_idx}", help=f"View {symbol} chart"):
                     st.session_state.show_chart = True
                     st.session_state.chart_symbol = symbol
                     st.rerun()
@@ -472,7 +481,7 @@ if st.session_state.show_chart:
             st.session_state.chart_interval = interval
     
     with col3:
-        if st.button("❌ Close", type="primary"):
+        if st.button("❌ Close", type="primary", key="close_chart_btn"):
             st.session_state.show_chart = False
             st.rerun()
     
@@ -552,6 +561,7 @@ if st.session_state.show_chart:
             st.metric("Close", f"${current['close']:.2f}")
     
     st.markdown("---")
+    # Stop auto-refresh when chart is open
     st.stop()
 
 # ============================================
@@ -627,7 +637,7 @@ if run_analysis:
             st.error(f"❌ Error: {str(e)}")
 
 # ============================================
-# RESULTS DISPLAY (Same as before)
+# RESULTS DISPLAY
 # ============================================
 if st.session_state.predictor is not None and st.session_state.predictions is not None:
     predictor = st.session_state.predictor
@@ -648,7 +658,6 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
         "🔮 Final Predictions"
     ])
     
-    # [REST OF THE TABS CODE REMAINS THE SAME AS PREVIOUS VERSION]
     # TAB 1: Trading Signals
     with tab1:
         st.markdown("### 🎯 Trading Signals & Recommendations")
@@ -720,15 +729,35 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                 
                 st.markdown("---")
     
-    # Other tabs remain the same...
-    # [Include all other tab code from previous version]
+    # TAB 2: Summary (placeholder - add your existing code)
+    with tab2:
+        st.markdown("### 📈 Model Performance Summary")
+        st.info("Add your summary tab content here")
     
+    # TAB 3-6: Predictions (placeholder - add your existing code)
+    with tab3:
+        st.markdown("### ⏰ 4H Predictions")
+        st.info("Add your 4H predictions tab content here")
+    
+    with tab4:
+        st.markdown("### 📅 1D Predictions")
+        st.info("Add your 1D predictions tab content here")
+    
+    with tab5:
+        st.markdown("### 📆 1W Predictions")
+        st.info("Add your 1W predictions tab content here")
+    
+    with tab6:
+        st.markdown("### 🔮 Final Predictions")
+        st.info("Add your final predictions tab content here")
+    
+    # Stop auto-refresh when showing results
     st.stop()
 
 # ============================================
-# AUTO-REFRESH
+# AUTO-REFRESH (only when not showing chart or results)
 # ============================================
-if auto_refresh:
+if auto_refresh and not st.session_state.show_chart and st.session_state.predictor is None:
     time.sleep(1)
     st.rerun()
 
