@@ -217,6 +217,8 @@ if 'last_refresh' not in st.session_state:
     st.session_state.last_refresh = time.time()
 if 'chart_data_cache' not in st.session_state:
     st.session_state.chart_data_cache = {}
+if 'analysis_running' not in st.session_state:
+    st.session_state.analysis_running = False
 
 # Initialize WebSocket
 if 'ws_handler' not in st.session_state:
@@ -411,7 +413,7 @@ def ticker_carousel():
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # Chart button - TRIGGER RERUN để mở chart ngay
+                    # Chart button
                     if st.button("📊 Chart", key=f"chart_{symbol}", use_container_width=True, type="secondary"):
                         st.session_state.show_chart = True
                         st.session_state.chart_symbol = symbol
@@ -427,7 +429,7 @@ def ticker_carousel():
 ticker_carousel()
 
 # ============================================
-# CHART CONTAINER - ĐƯA RA NGOÀI FRAGMENT
+# CHART CONTAINER
 # ============================================
 if st.session_state.show_chart:
     st.markdown("---")
@@ -540,10 +542,9 @@ if st.session_state.show_chart:
     st.markdown("---")
 
 # ============================================
-# CONTROL PANEL - CHỈ RENDER 1 LẦN
+# CONTROL PANEL
 # ============================================
-# Kiểm tra xem có đang trong quá trình run analysis không
-if not st.session_state.trigger_analysis:
+if not st.session_state.analysis_running:
     st.markdown("---")
     st.markdown("### 🎛️ Control Panel")
     
@@ -580,6 +581,7 @@ if not st.session_state.trigger_analysis:
             key="run_analysis_main"
         ):
             st.session_state.trigger_analysis = True
+            st.session_state.analysis_running = True
             st.rerun()
     
     with col4:
@@ -609,7 +611,7 @@ if not st.session_state.trigger_analysis:
 # RUN ANALYSIS - FIX DUPLICATE ISSUE
 # ============================================
 if st.session_state.trigger_analysis:
-    # QUAN TRỌNG: Reset trigger ngay lập tức để tránh re-run
+    # Reset trigger ngay lập tức
     st.session_state.trigger_analysis = False
     
     with st.spinner(f"🔄 Analyzing {st.session_state.selected_symbol}..."):
@@ -631,22 +633,23 @@ if st.session_state.trigger_analysis:
             
             st.session_state.predictor = predictor
             st.session_state.predictions = all_predictions
+            st.session_state.analysis_running = False
             
-            time.sleep(0.5)  # Giảm thời gian sleep
+            time.sleep(0.5)
             progress_bar.empty()
             status_text.empty()
             
             st.success(f"✅ Analysis completed for {st.session_state.selected_symbol}!")
             
-            # KHÔNG GỌI st.rerun() ở đây nữa
-            # Để script tự nhiên chạy tiếp xuống phần display results
+            # KHÔNG GỌI st.rerun() ở đây - để script tự chạy tiếp
             
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
-            st.session_state.trigger_analysis = False  # Reset trigger khi có lỗi
+            st.session_state.trigger_analysis = False
+            st.session_state.analysis_running = False
 
 # ============================================
-# RESULTS DISPLAY - ADD KEY ĐỂ TRÁNH DUPLICATE
+# RESULTS DISPLAY - FIX DUPLICATE
 # ============================================
 if st.session_state.predictor is not None and st.session_state.predictions is not None:
     predictor = st.session_state.predictor
@@ -658,8 +661,8 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
     st.markdown("---")
     st.markdown("## 📊 Analysis Results")
     
-    # THÊM KEY DUY NHẤT CHO TABS
-    tab_key = f"results_tabs_{st.session_state.selected_symbol}"
+    # Thêm key duy nhất cho tabs
+    tab_key = f"results_tabs_{st.session_state.selected_symbol}_{id(predictor)}"
     
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
         [
@@ -670,7 +673,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
             "📆 1W Predictions",
             "🔮 Final Predictions"
         ],
-        key=tab_key  # Thêm key để tránh duplicate
+        key=tab_key
     )
     
     # TAB 1: Trading Signals
@@ -696,8 +699,8 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                     signal_emoji = "➡️"
                     signal_color = "#95a5a6"
                 
-                # Thêm key duy nhất cho mỗi signal section
-                signal_key = f"signal_{timeframe}_{idx}"
+                # Key duy nhất cho mỗi signal
+                signal_key = f"signal_{timeframe}_{idx}_{id(predictor)}"
                 
                 st.markdown(f"""
                 <div class="{box_class}">
