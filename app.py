@@ -214,6 +214,9 @@ if 'selected_timezone' not in st.session_state:
     st.session_state.selected_timezone = "Asia/Ho_Chi_Minh"
 if 'trigger_analysis' not in st.session_state:
     st.session_state.trigger_analysis = False
+# ✅ THÊM FLAG ĐỂ KIỂM SOÁT AUTO-REFRESH
+if 'pause_ticker_refresh' not in st.session_state:
+    st.session_state.pause_ticker_refresh = False
 
 # Initialize WebSocket
 if 'ws_handler' not in st.session_state:
@@ -368,12 +371,16 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================
-# TICKER CAROUSEL (Auto-refresh)
+# TICKER CAROUSEL (Auto-refresh khi không có chart)
 # ============================================
 @st.fragment
 def ticker_carousel():
-    """Ticker carousel with auto-refresh"""
-    count = st_autorefresh(interval=500, limit=None, key="ticker_refresh")
+    """Ticker carousel with conditional auto-refresh"""
+    # ✅ CHỈ auto-refresh khi KHÔNG bị pause
+    if not st.session_state.pause_ticker_refresh:
+        count = st_autorefresh(interval=500, limit=None, key="ticker_refresh")
+    else:
+        count = 0
     
     st.markdown("---")
     
@@ -402,14 +409,18 @@ def ticker_carousel():
                     change_pct = ticker_data['change_percent']
                     is_up = change_pct >= 0
                     
+                    # ✅ Sử dụng unique key và set pause flag khi click
                     if st.button(
                         f"**{symbol}**\n\n${ticker_data['price']:,.2f}\n\n{'▲' if is_up else '▼'} {abs(change_pct):.2f}%",
                         key=f"ticker_{symbol}_{count}",
                         use_container_width=True,
                         type="secondary"
                     ):
+                        # ✅ Set tất cả state cần thiết
                         st.session_state.show_chart = True
                         st.session_state.chart_symbol = symbol
+                        st.session_state.chart_interval = "1h"
+                        st.session_state.pause_ticker_refresh = True  # ✅ Tạm dừng auto-refresh
                         st.rerun()
     
     # Next button
@@ -418,30 +429,6 @@ def ticker_carousel():
             if st.session_state.ticker_start_index + visible_count < len(SYMBOLS):
                 st.session_state.ticker_start_index += visible_count
                 st.rerun()
-
-# ============================================
-# REAL-TIME PRICE DISPLAY (Auto-refresh)
-# ============================================
-@st.fragment
-def realtime_price_display():
-    """Display real-time price for selected symbol"""
-    count = st_autorefresh(interval=500, limit=None, key="price_refresh")
-    
-    current_ticker = get_ticker_realtime(st.session_state.selected_symbol)
-    if current_ticker:
-        change_pct = current_ticker['change_percent']
-        is_up = change_pct >= 0
-        price_class = "control-price-up" if is_up else "control-price-down"
-        
-        st.markdown(f"""
-        <div class="control-price-box">
-            <div class="control-symbol">{st.session_state.selected_symbol}</div>
-            <div class="{price_class}">${current_ticker['price']:,.2f}</div>
-            <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">
-                {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
 
 # Call ticker carousel
 ticker_carousel()
@@ -490,7 +477,30 @@ with col3:
         st.rerun()
 
 with col4:
-    st.write("")  # Spacing line 1 (để cân với label của col1, col2)
+    st.write("")  # Spacing line 1
+    
+    # ✅ REAL-TIME PRICE DISPLAY (Auto-refresh)
+    @st.fragment
+    def realtime_price_display():
+        """Display real-time price for selected symbol"""
+        count = st_autorefresh(interval=500, limit=None, key="price_refresh")
+        
+        current_ticker = get_ticker_realtime(st.session_state.selected_symbol)
+        if current_ticker:
+            change_pct = current_ticker['change_percent']
+            is_up = change_pct >= 0
+            price_class = "control-price-up" if is_up else "control-price-down"
+            
+            st.markdown(f"""
+            <div class="control-price-box">
+                <div class="control-symbol">{st.session_state.selected_symbol}</div>
+                <div class="{price_class}">${current_ticker['price']:,.2f}</div>
+                <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">
+                    {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+    
     realtime_price_display()
 
 # ============================================
@@ -509,14 +519,18 @@ if st.session_state.show_chart:
         interval = st.selectbox(
             "Timeframe",
             ['15m', '1h', '4h', '1d'],
-            index=['15m', '1h', '4h', '1d'].index(st.session_state.chart_interval)
+            index=['15m', '1h', '4h', '1d'].index(st.session_state.chart_interval),
+            key="chart_interval_select"
         )
         if interval != st.session_state.chart_interval:
             st.session_state.chart_interval = interval
+            st.rerun()
     
     with col3:
-        if st.button("❌ Close", type="primary"):
+        # ✅ Khi đóng chart, bật lại auto-refresh
+        if st.button("❌ Close", type="primary", key="close_chart_btn"):
             st.session_state.show_chart = False
+            st.session_state.pause_ticker_refresh = False  # ✅ Bật lại auto-refresh
             st.rerun()
     
     df = get_klines(st.session_state.chart_symbol, st.session_state.chart_interval, 200)
