@@ -6,7 +6,6 @@ import time
 import requests
 from datetime import datetime
 import numpy as np
-from streamlit_autorefresh import st_autorefresh
 
 # Import WebSocket handler
 from websocket_handler import BinanceWebSocket
@@ -54,7 +53,7 @@ st.markdown("""
         opacity: 0.9;
     }
     
-    /* Control price box - CÂN BẰNG */
+    /* Control price box */
     .control-price-box {
         background-color: #2d2d2d;
         padding: 10px;
@@ -123,7 +122,7 @@ st.markdown("""
         font-size: 28px !important;
     }
     
-    /* ẨN RUNNING INDICATOR - QUAN TRỌNG */
+    /* ẨN RUNNING INDICATOR */
     [data-testid="stStatusWidget"] {
         visibility: hidden;
         height: 0px;
@@ -214,6 +213,8 @@ if 'selected_timezone' not in st.session_state:
     st.session_state.selected_timezone = "Asia/Ho_Chi_Minh"
 if 'trigger_analysis' not in st.session_state:
     st.session_state.trigger_analysis = False
+if 'last_refresh' not in st.session_state:
+    st.session_state.last_refresh = time.time()
 
 # Initialize WebSocket
 if 'ws_handler' not in st.session_state:
@@ -358,6 +359,17 @@ def calculate_trading_signal(predictor, timeframe):
     }
 
 # ============================================
+# AUTO REFRESH LOGIC
+# ============================================
+# Check if need to refresh (every 500ms)
+current_time = time.time()
+if current_time - st.session_state.last_refresh >= 0.5:
+    st.session_state.last_refresh = current_time
+    if not st.session_state.trigger_analysis:  # Don't refresh during analysis
+        time.sleep(0.1)
+        st.rerun()
+
+# ============================================
 # BEAUTIFUL HEADER
 # ============================================
 st.markdown("""
@@ -368,91 +380,59 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================
-# TICKER CAROUSEL (Auto-refresh)
+# TICKER CAROUSEL
 # ============================================
-@st.fragment
-def ticker_carousel():
-    """Ticker carousel with auto-refresh"""
-    count = st_autorefresh(interval=500, limit=None, key="ticker_refresh")
-    
-    st.markdown("---")
-    
-    visible_count = 4
-    start_idx = st.session_state.ticker_start_index
-    
-    nav_col1, *ticker_cols, nav_col2 = st.columns([1, 2, 2, 2, 2, 1])
-    
-    # Previous button
-    with nav_col1:
-        if st.button("◀", key=f"prev_btn_{count}", help="Previous symbols"):
-            if st.session_state.ticker_start_index > 0:
-                st.session_state.ticker_start_index -= visible_count
-                st.rerun()
-    
-    # Display tickers
-    for idx, col in enumerate(ticker_cols):
-        symbol_idx = start_idx + idx
-        if symbol_idx < len(SYMBOLS):
-            symbol = SYMBOLS[symbol_idx]
-            
-            with col:
-                ticker_data = get_ticker_realtime(symbol)
-                
-                if ticker_data:
-                    change_pct = ticker_data['change_percent']
-                    is_up = change_pct >= 0
-                    
-                    # Ticker info display
-                    st.markdown(f"""
-                    <div style="background-color: #2d2d2d; padding: 15px; border-radius: 8px; border: 1px solid #3d3d3d; text-align: center;">
-                        <div style="color: #ffffff; font-weight: bold; font-size: 16px; margin-bottom: 8px;">{symbol}</div>
-                        <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-weight: bold; font-size: 24px; margin-bottom: 5px;">${ticker_data['price']:,.2f}</div>
-                        <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">{'▲' if is_up else '▼'} {abs(change_pct):.2f}%</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Chart button below ticker
-                    if st.button("📊 Chart", key=f"chart_{symbol}_{count}", use_container_width=True, type="secondary"):
-                        st.session_state.show_chart = True
-                        st.session_state.chart_symbol = symbol
-                        st.rerun()
-    
-    # Next button
-    with nav_col2:
-        if st.button("▶", key=f"next_btn_{count}", help="Next symbols"):
-            if st.session_state.ticker_start_index + visible_count < len(SYMBOLS):
-                st.session_state.ticker_start_index += visible_count
-                st.rerun()
+st.markdown("---")
 
-# ============================================
-# REAL-TIME PRICE DISPLAY (Auto-refresh)
-# ============================================
-@st.fragment
-def realtime_price_display():
-    """Display real-time price for selected symbol"""
-    count = st_autorefresh(interval=500, limit=None, key="price_refresh")
-    
-    current_ticker = get_ticker_realtime(st.session_state.selected_symbol)
-    if current_ticker:
-        change_pct = current_ticker['change_percent']
-        is_up = change_pct >= 0
-        price_class = "control-price-up" if is_up else "control-price-down"
+visible_count = 4
+start_idx = st.session_state.ticker_start_index
+
+nav_col1, *ticker_cols, nav_col2 = st.columns([1, 2, 2, 2, 2, 1])
+
+# Previous button
+with nav_col1:
+    if st.button("◀", key="prev_btn", help="Previous symbols"):
+        if st.session_state.ticker_start_index > 0:
+            st.session_state.ticker_start_index -= visible_count
+            st.rerun()
+
+# Display tickers
+for idx, col in enumerate(ticker_cols):
+    symbol_idx = start_idx + idx
+    if symbol_idx < len(SYMBOLS):
+        symbol = SYMBOLS[symbol_idx]
         
-        st.markdown(f"""
-        <div class="control-price-box">
-            <div class="control-symbol">{st.session_state.selected_symbol}</div>
-            <div class="{price_class}">${current_ticker['price']:,.2f}</div>
-            <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">
-                {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        with col:
+            ticker_data = get_ticker_realtime(symbol)
+            
+            if ticker_data:
+                change_pct = ticker_data['change_percent']
+                is_up = change_pct >= 0
+                
+                # Ticker info display
+                st.markdown(f"""
+                <div style="background-color: #2d2d2d; padding: 15px; border-radius: 8px; border: 1px solid #3d3d3d; text-align: center;">
+                    <div style="color: #ffffff; font-weight: bold; font-size: 16px; margin-bottom: 8px;">{symbol}</div>
+                    <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-weight: bold; font-size: 24px; margin-bottom: 5px;">${ticker_data['price']:,.2f}</div>
+                    <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">{'▲' if is_up else '▼'} {abs(change_pct):.2f}%</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Chart button below ticker
+                if st.button("📊 Chart", key=f"chart_{symbol}", use_container_width=True, type="secondary"):
+                    st.session_state.show_chart = True
+                    st.session_state.chart_symbol = symbol
+                    st.rerun()
 
-# Call ticker carousel
-ticker_carousel()
+# Next button
+with nav_col2:
+    if st.button("▶", key="next_btn", help="Next symbols"):
+        if st.session_state.ticker_start_index + visible_count < len(SYMBOLS):
+            st.session_state.ticker_start_index += visible_count
+            st.rerun()
 
 # ============================================
-# CANDLESTICK CHART (Separate section - can be opened anytime)
+# CANDLESTICK CHART
 # ============================================
 if st.session_state.show_chart:
     st.markdown("---")
@@ -556,7 +536,7 @@ if st.session_state.show_chart:
     st.markdown("---")
 
 # ============================================
-# CONTROL PANEL (Static - No auto-refresh)
+# CONTROL PANEL
 # ============================================
 st.markdown("---")
 st.markdown("### 🎛️ Control Panel")
@@ -587,8 +567,8 @@ with col2:
         st.rerun()
 
 with col3:
-    st.write("")  # Spacing line 1
-    st.write("")  # Spacing line 2
+    st.write("")
+    st.write("")
     if st.button(
         "🚀 Run Analysis", 
         type="primary", 
@@ -599,14 +579,29 @@ with col3:
         st.rerun()
 
 with col4:
-    st.write("")  # Spacing line 1 (để cân với label của col1, col2)
-    realtime_price_display()
+    st.write("")
+    # Real-time price display
+    current_ticker = get_ticker_realtime(st.session_state.selected_symbol)
+    if current_ticker:
+        change_pct = current_ticker['change_percent']
+        is_up = change_pct >= 0
+        price_class = "control-price-up" if is_up else "control-price-down"
+        
+        st.markdown(f"""
+        <div class="control-price-box">
+            <div class="control-symbol">{st.session_state.selected_symbol}</div>
+            <div class="{price_class}">${current_ticker['price']:,.2f}</div>
+            <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">
+                {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 # ============================================
-# RUN ANALYSIS (Triggered by flag)
+# RUN ANALYSIS
 # ============================================
 if st.session_state.trigger_analysis:
-    st.session_state.trigger_analysis = False  # Reset flag immediately
+    st.session_state.trigger_analysis = False
     
     with st.spinner(f"🔄 Analyzing {st.session_state.selected_symbol}..."):
         try:
