@@ -366,6 +366,7 @@ def calculate_trading_signal(predictor, timeframe):
 st.markdown("""
 <div class="header-container">
     <h1 class="header-title">🔮 Crypto Prediction</h1>
+    <p class="header-subtitle">AI-Powered Real-time Market Analysis & Trading Signals</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -426,11 +427,11 @@ def ticker_carousel():
 ticker_carousel()
 
 # ============================================
-# CHART CONTAINER (Fragment - Independent)
+# CHART CONTAINER (Fragment - Independent) - ALWAYS AVAILABLE
 # ============================================
 @st.fragment
 def chart_display():
-    """Chart display fragment - instant open/close"""
+    """Chart display fragment - instant open/close - works before and after analysis"""
     if st.session_state.show_chart:
         st.markdown("---")
         st.markdown("## 📈 Candlestick Chart")
@@ -539,6 +540,7 @@ def chart_display():
         
         st.markdown("---")
 
+# Call chart display - ALWAYS RENDERED (before or after analysis)
 chart_display()
 
 # ============================================
