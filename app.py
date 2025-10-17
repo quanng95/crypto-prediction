@@ -540,10 +540,10 @@ if st.session_state.show_chart:
     st.markdown("---")
 
 # ============================================
-# CONTROL PANEL - CHỈ RENDER 1 LẦN
+# CONTROL PANEL - CHỈ HIỂN THỊ KHI KHÔNG MỞ CHART
 # ============================================
-# Kiểm tra xem có đang trong quá trình run analysis không
-if not st.session_state.trigger_analysis:
+# Chỉ hiển thị Control Panel khi KHÔNG mở chart và KHÔNG đang run analysis
+if not st.session_state.show_chart and not st.session_state.trigger_analysis:
     st.markdown("---")
     st.markdown("### 🎛️ Control Panel")
     
