@@ -54,7 +54,7 @@ st.markdown("""
         opacity: 0.9;
     }
     
-    /* Control price box - CÂN BẰNG */
+    /* Control price box */
     .control-price-box {
         background-color: #2d2d2d;
         padding: 10px;
@@ -123,7 +123,7 @@ st.markdown("""
         font-size: 28px !important;
     }
     
-    /* ẨN RUNNING INDICATOR - QUAN TRỌNG */
+    /* ẨN RUNNING INDICATOR */
     [data-testid="stStatusWidget"] {
         visibility: hidden;
         height: 0px;
@@ -214,9 +214,6 @@ if 'selected_timezone' not in st.session_state:
     st.session_state.selected_timezone = "Asia/Ho_Chi_Minh"
 if 'trigger_analysis' not in st.session_state:
     st.session_state.trigger_analysis = False
-# ✅ THÊM FLAG ĐỂ KIỂM SOÁT AUTO-REFRESH
-if 'pause_ticker_refresh' not in st.session_state:
-    st.session_state.pause_ticker_refresh = False
 
 # Initialize WebSocket
 if 'ws_handler' not in st.session_state:
@@ -360,6 +357,43 @@ def calculate_trading_signal(predictor, timeframe):
         'mid_term_change': mid_change
     }
 
+def create_mini_chart(symbol, interval='1h'):
+    """Create mini sparkline chart"""
+    df = get_klines(symbol, interval, 50)
+    
+    if df is None or len(df) == 0:
+        return None
+    
+    fig = go.Figure()
+    
+    # Determine color based on trend
+    first_price = df['close'].iloc[0]
+    last_price = df['close'].iloc[-1]
+    color = '#27ae60' if last_price >= first_price else '#e74c3c'
+    
+    fig.add_trace(go.Scatter(
+        x=df['timestamp'],
+        y=df['close'],
+        mode='lines',
+        line=dict(color=color, width=2),
+        fill='tozeroy',
+        fillcolor=f'rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.2)',
+        hovertemplate='%{y:.2f}<extra></extra>'
+    ))
+    
+    fig.update_layout(
+        height=100,
+        margin=dict(l=0, r=0, t=0, b=0),
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False),
+        showlegend=False,
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        hovermode='x'
+    )
+    
+    return fig
+
 # ============================================
 # BEAUTIFUL HEADER
 # ============================================
@@ -371,16 +405,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================
-# TICKER CAROUSEL (Auto-refresh khi không có chart)
+# TICKER CAROUSEL with Mini Charts
 # ============================================
 @st.fragment
 def ticker_carousel():
-    """Ticker carousel with conditional auto-refresh"""
-    # ✅ CHỈ auto-refresh khi KHÔNG bị pause
-    if not st.session_state.pause_ticker_refresh:
-        count = st_autorefresh(interval=500, limit=None, key="ticker_refresh")
-    else:
-        count = 0
+    """Ticker carousel with auto-refresh and mini charts"""
+    count = st_autorefresh(interval=500, limit=None, key="ticker_refresh")
     
     st.markdown("---")
     
@@ -396,7 +426,7 @@ def ticker_carousel():
                 st.session_state.ticker_start_index -= visible_count
                 st.rerun()
     
-    # Display tickers
+    # Display tickers with mini charts
     for idx, col in enumerate(ticker_cols):
         symbol_idx = start_idx + idx
         if symbol_idx < len(SYMBOLS):
@@ -409,18 +439,34 @@ def ticker_carousel():
                     change_pct = ticker_data['change_percent']
                     is_up = change_pct >= 0
                     
-                    # ✅ Sử dụng unique key và set pause flag khi click
+                    # Display ticker info
+                    st.markdown(f"""
+                    <div style='text-align: center; padding: 10px; background-color: #2d2d2d; border-radius: 8px; margin-bottom: 5px;'>
+                        <div style='font-weight: bold; font-size: 16px; color: #ffffff;'>{symbol}</div>
+                        <div style='font-size: 24px; font-weight: bold; color: {"#27ae60" if is_up else "#e74c3c"};'>
+                            ${ticker_data['price']:,.2f}
+                        </div>
+                        <div style='font-size: 14px; color: {"#27ae60" if is_up else "#e74c3c"};'>
+                            {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Mini chart
+                    mini_chart = create_mini_chart(symbol, '1h')
+                    if mini_chart:
+                        st.plotly_chart(mini_chart, use_container_width=True, config={'displayModeBar': False})
+                    
+                    # Chart button
                     if st.button(
-                        f"**{symbol}**\n\n${ticker_data['price']:,.2f}\n\n{'▲' if is_up else '▼'} {abs(change_pct):.2f}%",
-                        key=f"ticker_{symbol}_{count}",
+                        "📊 Chart",
+                        key=f"chart_btn_{symbol}_{count}",
                         use_container_width=True,
                         type="secondary"
                     ):
-                        # ✅ Set tất cả state cần thiết
                         st.session_state.show_chart = True
                         st.session_state.chart_symbol = symbol
                         st.session_state.chart_interval = "1h"
-                        st.session_state.pause_ticker_refresh = True  # ✅ Tạm dừng auto-refresh
                         st.rerun()
     
     # Next button
@@ -434,7 +480,7 @@ def ticker_carousel():
 ticker_carousel()
 
 # ============================================
-# CONTROL PANEL (Static - No auto-refresh)
+# CONTROL PANEL
 # ============================================
 st.markdown("---")
 st.markdown("### 🎛️ Control Panel")
@@ -465,8 +511,8 @@ with col2:
         st.rerun()
 
 with col3:
-    st.write("")  # Spacing line 1
-    st.write("")  # Spacing line 2
+    st.write("")
+    st.write("")
     if st.button(
         "🚀 Run Analysis", 
         type="primary", 
@@ -477,9 +523,8 @@ with col3:
         st.rerun()
 
 with col4:
-    st.write("")  # Spacing line 1
+    st.write("")
     
-    # ✅ REAL-TIME PRICE DISPLAY (Auto-refresh)
     @st.fragment
     def realtime_price_display():
         """Display real-time price for selected symbol"""
@@ -504,7 +549,7 @@ with col4:
     realtime_price_display()
 
 # ============================================
-# CANDLESTICK CHART
+# CANDLESTICK CHART MODAL
 # ============================================
 if st.session_state.show_chart:
     st.markdown("---")
@@ -527,10 +572,8 @@ if st.session_state.show_chart:
             st.rerun()
     
     with col3:
-        # ✅ Khi đóng chart, bật lại auto-refresh
-        if st.button("❌ Close", type="primary", key="close_chart_btn"):
+        if st.button("❌ Close Chart", type="primary", key="close_chart_btn", use_container_width=True):
             st.session_state.show_chart = False
-            st.session_state.pause_ticker_refresh = False  # ✅ Bật lại auto-refresh
             st.rerun()
     
     df = get_klines(st.session_state.chart_symbol, st.session_state.chart_interval, 200)
@@ -609,13 +652,12 @@ if st.session_state.show_chart:
             st.metric("Close", f"${current['close']:.2f}")
     
     st.markdown("---")
-    st.stop()
 
 # ============================================
-# RUN ANALYSIS (Triggered by flag)
+# RUN ANALYSIS
 # ============================================
 if st.session_state.trigger_analysis:
-    st.session_state.trigger_analysis = False  # Reset flag immediately
+    st.session_state.trigger_analysis = False
     
     with st.spinner(f"🔄 Analyzing {st.session_state.selected_symbol}..."):
         try:
