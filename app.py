@@ -606,9 +606,10 @@ if not st.session_state.trigger_analysis:
         price_display()
 
 # ============================================
-# RUN ANALYSIS
+# RUN ANALYSIS - FIX DUPLICATE ISSUE
 # ============================================
 if st.session_state.trigger_analysis:
+    # QUAN TRỌNG: Reset trigger ngay lập tức để tránh re-run
     st.session_state.trigger_analysis = False
     
     with st.spinner(f"🔄 Analyzing {st.session_state.selected_symbol}..."):
@@ -631,18 +632,21 @@ if st.session_state.trigger_analysis:
             st.session_state.predictor = predictor
             st.session_state.predictions = all_predictions
             
-            time.sleep(1)
+            time.sleep(0.5)  # Giảm thời gian sleep
             progress_bar.empty()
             status_text.empty()
             
             st.success(f"✅ Analysis completed for {st.session_state.selected_symbol}!")
-            st.rerun()
+            
+            # KHÔNG GỌI st.rerun() ở đây nữa
+            # Để script tự nhiên chạy tiếp xuống phần display results
             
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
+            st.session_state.trigger_analysis = False  # Reset trigger khi có lỗi
 
 # ============================================
-# RESULTS DISPLAY
+# RESULTS DISPLAY - ADD KEY ĐỂ TRÁNH DUPLICATE
 # ============================================
 if st.session_state.predictor is not None and st.session_state.predictions is not None:
     predictor = st.session_state.predictor
@@ -654,20 +658,26 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
     st.markdown("---")
     st.markdown("## 📊 Analysis Results")
     
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-        "🎯 Trading Signals",
-        "📈 Summary",
-        "⏰ 4H Predictions",
-        "📅 1D Predictions",
-        "📆 1W Predictions",
-        "🔮 Final Predictions"
-    ])
+    # THÊM KEY DUY NHẤT CHO TABS
+    tab_key = f"results_tabs_{st.session_state.selected_symbol}"
+    
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+        [
+            "🎯 Trading Signals",
+            "📈 Summary",
+            "⏰ 4H Predictions",
+            "📅 1D Predictions",
+            "📆 1W Predictions",
+            "🔮 Final Predictions"
+        ],
+        key=tab_key  # Thêm key để tránh duplicate
+    )
     
     # TAB 1: Trading Signals
     with tab1:
         st.markdown("### 🎯 Trading Signals & Recommendations")
         
-        for timeframe in ['4h', '1d', '1w']:
+        for idx, timeframe in enumerate(['4h', '1d', '1w']):
             signal_data = calculate_trading_signal(predictor, timeframe)
             
             if signal_data:
@@ -686,6 +696,9 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                     signal_emoji = "➡️"
                     signal_color = "#95a5a6"
                 
+                # Thêm key duy nhất cho mỗi signal section
+                signal_key = f"signal_{timeframe}_{idx}"
+                
                 st.markdown(f"""
                 <div class="{box_class}">
                     <h3 style="color: {signal_color};">{signal_emoji} {timeframe.upper()} - {signal} Signal</h3>
@@ -696,41 +709,53 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                 
                 with col1:
                     st.markdown("#### 📊 Market Sentiment")
-                    st.metric("Confidence", f"{signal_data['confidence']:.1f}%")
+                    st.metric("Confidence", f"{signal_data['confidence']:.1f}%", key=f"{signal_key}_conf")
                     st.metric("Bull Probability", f"{signal_data['bull_prob']:.1f}%", 
-                             delta=f"{signal_data['bull_prob'] - 50:+.1f}%")
+                             delta=f"{signal_data['bull_prob'] - 50:+.1f}%",
+                             key=f"{signal_key}_bull")
                     st.metric("Bear Probability", f"{signal_data['bear_prob']:.1f}%",
-                             delta=f"{signal_data['bear_prob'] - 50:+.1f}%")
+                             delta=f"{signal_data['bear_prob'] - 50:+.1f}%",
+                             key=f"{signal_key}_bear")
                 
                 with col2:
                     st.markdown("#### 💰 Entry & Risk Management")
-                    st.metric("Current Price", f"${signal_data['current_price']:.2f}")
+                    st.metric("Current Price", f"${signal_data['current_price']:.2f}",
+                             key=f"{signal_key}_curr")
                     st.metric("Entry Price", f"${signal_data['entry']:.2f}",
-                             delta=f"{((signal_data['entry']/signal_data['current_price']-1)*100):+.2f}%")
+                             delta=f"{((signal_data['entry']/signal_data['current_price']-1)*100):+.2f}%",
+                             key=f"{signal_key}_entry")
                     st.metric("Stop Loss", f"${signal_data['stop_loss']:.2f}",
                              delta=f"{((signal_data['stop_loss']/signal_data['entry']-1)*100):+.2f}%",
-                             delta_color="inverse")
+                             delta_color="inverse",
+                             key=f"{signal_key}_sl")
                 
                 with col3:
                     st.markdown("#### 🎯 Take Profit Targets")
                     st.metric("TP1 (Conservative)", f"${signal_data['tp1']:.2f}",
-                             delta=f"{((signal_data['tp1']/signal_data['entry']-1)*100):+.2f}%")
+                             delta=f"{((signal_data['tp1']/signal_data['entry']-1)*100):+.2f}%",
+                             key=f"{signal_key}_tp1")
                     st.metric("TP2 (Moderate)", f"${signal_data['tp2']:.2f}",
-                             delta=f"{((signal_data['tp2']/signal_data['entry']-1)*100):+.2f}%")
+                             delta=f"{((signal_data['tp2']/signal_data['entry']-1)*100):+.2f}%",
+                             key=f"{signal_key}_tp2")
                     st.metric("TP3 (Aggressive)", f"${signal_data['tp3']:.2f}",
-                             delta=f"{((signal_data['tp3']/signal_data['entry']-1)*100):+.2f}%")
+                             delta=f"{((signal_data['tp3']/signal_data['entry']-1)*100):+.2f}%",
+                             key=f"{signal_key}_tp3")
                 
                 st.markdown("#### 📈 Model Performance")
                 col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
-                    st.metric("Direction Accuracy", f"{signal_data['accuracy']:.1f}%")
+                    st.metric("Direction Accuracy", f"{signal_data['accuracy']:.1f}%",
+                             key=f"{signal_key}_acc")
                 with col2:
-                    st.metric("R² Score", f"{signal_data['r2_score']:.4f}")
+                    st.metric("R² Score", f"{signal_data['r2_score']:.4f}",
+                             key=f"{signal_key}_r2")
                 with col3:
-                    st.metric("Short-term Trend", f"{signal_data['short_term_change']:+.2f}%")
+                    st.metric("Short-term Trend", f"{signal_data['short_term_change']:+.2f}%",
+                             key=f"{signal_key}_short")
                 with col4:
-                    st.metric("Mid-term Trend", f"{signal_data['mid_term_change']:+.2f}%")
+                    st.metric("Mid-term Trend", f"{signal_data['mid_term_change']:+.2f}%",
+                             key=f"{signal_key}_mid")
                 
                 st.markdown("---")
     
