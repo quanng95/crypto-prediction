@@ -215,6 +215,8 @@ if 'trigger_analysis' not in st.session_state:
     st.session_state.trigger_analysis = False
 if 'last_refresh' not in st.session_state:
     st.session_state.last_refresh = time.time()
+if 'chart_data_cache' not in st.session_state:
+    st.session_state.chart_data_cache = {}
 
 # Initialize WebSocket
 if 'ws_handler' not in st.session_state:
@@ -359,17 +361,6 @@ def calculate_trading_signal(predictor, timeframe):
     }
 
 # ============================================
-# AUTO REFRESH LOGIC
-# ============================================
-# Check if need to refresh (every 500ms)
-current_time = time.time()
-if current_time - st.session_state.last_refresh >= 0.5:
-    st.session_state.last_refresh = current_time
-    if not st.session_state.trigger_analysis:  # Don't refresh during analysis
-        time.sleep(0.1)
-        st.rerun()
-
-# ============================================
 # BEAUTIFUL HEADER
 # ============================================
 st.markdown("""
@@ -380,163 +371,179 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================
-# TICKER CAROUSEL
+# TICKER CAROUSEL (Fragment with auto-refresh)
 # ============================================
-st.markdown("---")
-
-visible_count = 4
-start_idx = st.session_state.ticker_start_index
-
-nav_col1, *ticker_cols, nav_col2 = st.columns([1, 2, 2, 2, 2, 1])
-
-# Previous button
-with nav_col1:
-    if st.button("◀", key="prev_btn", help="Previous symbols"):
-        if st.session_state.ticker_start_index > 0:
-            st.session_state.ticker_start_index -= visible_count
-            st.rerun()
-
-# Display tickers
-for idx, col in enumerate(ticker_cols):
-    symbol_idx = start_idx + idx
-    if symbol_idx < len(SYMBOLS):
-        symbol = SYMBOLS[symbol_idx]
-        
-        with col:
-            ticker_data = get_ticker_realtime(symbol)
-            
-            if ticker_data:
-                change_pct = ticker_data['change_percent']
-                is_up = change_pct >= 0
-                
-                # Ticker info display
-                st.markdown(f"""
-                <div style="background-color: #2d2d2d; padding: 15px; border-radius: 8px; border: 1px solid #3d3d3d; text-align: center;">
-                    <div style="color: #ffffff; font-weight: bold; font-size: 16px; margin-bottom: 8px;">{symbol}</div>
-                    <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-weight: bold; font-size: 24px; margin-bottom: 5px;">${ticker_data['price']:,.2f}</div>
-                    <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">{'▲' if is_up else '▼'} {abs(change_pct):.2f}%</div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Chart button below ticker
-                if st.button("📊 Chart", key=f"chart_{symbol}", use_container_width=True, type="secondary"):
-                    st.session_state.show_chart = True
-                    st.session_state.chart_symbol = symbol
-                    st.rerun()
-
-# Next button
-with nav_col2:
-    if st.button("▶", key="next_btn", help="Next symbols"):
-        if st.session_state.ticker_start_index + visible_count < len(SYMBOLS):
-            st.session_state.ticker_start_index += visible_count
-            st.rerun()
-
-# ============================================
-# CANDLESTICK CHART
-# ============================================
-if st.session_state.show_chart:
+@st.fragment(run_every="0.5s")
+def ticker_carousel():
+    """Ticker carousel with auto-refresh"""
     st.markdown("---")
-    st.markdown("## 📈 Candlestick Chart")
     
-    col1, col2, col3 = st.columns([2, 2, 1])
+    visible_count = 4
+    start_idx = st.session_state.ticker_start_index
     
-    with col1:
-        st.markdown(f"### {st.session_state.chart_symbol}")
+    nav_col1, *ticker_cols, nav_col2 = st.columns([1, 2, 2, 2, 2, 1])
     
-    with col2:
-        interval = st.selectbox(
-            "Timeframe",
-            ['15m', '1h', '4h', '1d'],
-            index=['15m', '1h', '4h', '1d'].index(st.session_state.chart_interval),
-            key="chart_interval_select"
-        )
-        if interval != st.session_state.chart_interval:
-            st.session_state.chart_interval = interval
+    # Previous button
+    with nav_col1:
+        if st.button("◀", key="prev_btn", help="Previous symbols"):
+            if st.session_state.ticker_start_index > 0:
+                st.session_state.ticker_start_index -= visible_count
+                st.rerun()
     
-    with col3:
-        if st.button("❌ Close Chart", type="primary", key="close_chart_btn"):
-            st.session_state.show_chart = False
-            st.rerun()
+    # Display tickers
+    for idx, col in enumerate(ticker_cols):
+        symbol_idx = start_idx + idx
+        if symbol_idx < len(SYMBOLS):
+            symbol = SYMBOLS[symbol_idx]
+            
+            with col:
+                ticker_data = get_ticker_realtime(symbol)
+                
+                if ticker_data:
+                    change_pct = ticker_data['change_percent']
+                    is_up = change_pct >= 0
+                    
+                    # Ticker info display
+                    st.markdown(f"""
+                    <div style="background-color: #2d2d2d; padding: 15px; border-radius: 8px; border: 1px solid #3d3d3d; text-align: center;">
+                        <div style="color: #ffffff; font-weight: bold; font-size: 16px; margin-bottom: 8px;">{symbol}</div>
+                        <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-weight: bold; font-size: 24px; margin-bottom: 5px;">${ticker_data['price']:,.2f}</div>
+                        <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">{'▲' if is_up else '▼'} {abs(change_pct):.2f}%</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Chart button below ticker - NO RERUN
+                    if st.button("📊 Chart", key=f"chart_{symbol}", use_container_width=True, type="secondary"):
+                        st.session_state.show_chart = True
+                        st.session_state.chart_symbol = symbol
     
-    df = get_klines(st.session_state.chart_symbol, st.session_state.chart_interval, 200)
-    
-    if df is not None and len(df) > 0:
-        fig = make_subplots(
-            rows=2, cols=1,
-            shared_xaxes=True,
-            vertical_spacing=0.03,
-            row_heights=[0.7, 0.3],
-            subplot_titles=(f'{st.session_state.chart_symbol} - {st.session_state.chart_interval.upper()}', 'Volume')
-        )
+    # Next button
+    with nav_col2:
+        if st.button("▶", key="next_btn", help="Next symbols"):
+            if st.session_state.ticker_start_index + visible_count < len(SYMBOLS):
+                st.session_state.ticker_start_index += visible_count
+                st.rerun()
+
+ticker_carousel()
+
+# ============================================
+# CHART CONTAINER (Fragment - Independent)
+# ============================================
+@st.fragment
+def chart_display():
+    """Chart display fragment - instant open/close"""
+    if st.session_state.show_chart:
+        st.markdown("---")
+        st.markdown("## 📈 Candlestick Chart")
         
-        fig.add_trace(
-            go.Candlestick(
-                x=df['timestamp'],
-                open=df['open'],
-                high=df['high'],
-                low=df['low'],
-                close=df['close'],
-                name='Price',
-                increasing_line_color='#26a69a',
-                decreasing_line_color='#ef5350'
-            ),
-            row=1, col=1
-        )
-        
-        colors = ['#26a69a' if row['close'] >= row['open'] else '#ef5350' 
-                 for _, row in df.iterrows()]
-        
-        fig.add_trace(
-            go.Bar(
-                x=df['timestamp'],
-                y=df['volume'],
-                name='Volume',
-                marker_color=colors,
-                opacity=0.6
-            ),
-            row=2, col=1
-        )
-        
-        fig.update_layout(
-            height=700,
-            template='plotly_dark',
-            xaxis_rangeslider_visible=False,
-            showlegend=False,
-            hovermode='x unified',
-            dragmode='pan',
-            modebar_add=['zoom2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d']
-        )
-        
-        fig.update_xaxes(fixedrange=False)
-        fig.update_yaxes(fixedrange=False)
-        
-        fig.update_xaxes(title_text="Time", row=2, col=1)
-        fig.update_yaxes(title_text="Price ($)", row=1, col=1)
-        fig.update_yaxes(title_text="Volume", row=2, col=1)
-        
-        st.plotly_chart(fig, use_container_width=True, config={
-            'scrollZoom': True,
-            'displayModeBar': True,
-            'displaylogo': False,
-            'modeBarButtonsToRemove': ['select2d', 'lasso2d']
-        })
-        
-        current = df.iloc[-1]
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3 = st.columns([2, 2, 1])
         
         with col1:
-            st.metric("Open", f"${current['open']:.2f}")
+            st.markdown(f"### {st.session_state.chart_symbol}")
+        
         with col2:
-            st.metric("High", f"${current['high']:.2f}")
+            interval = st.selectbox(
+                "Timeframe",
+                ['15m', '1h', '4h', '1d'],
+                index=['15m', '1h', '4h', '1d'].index(st.session_state.chart_interval),
+                key="chart_interval_select"
+            )
+            if interval != st.session_state.chart_interval:
+                st.session_state.chart_interval = interval
+        
         with col3:
-            st.metric("Low", f"${current['low']:.2f}")
-        with col4:
-            st.metric("Close", f"${current['close']:.2f}")
-    
-    st.markdown("---")
+            if st.button("❌ Close", type="primary", key="close_chart_btn"):
+                st.session_state.show_chart = False
+        
+        # Cache key for chart data
+        cache_key = f"{st.session_state.chart_symbol}_{st.session_state.chart_interval}"
+        
+        # Get data from cache or fetch new
+        if cache_key not in st.session_state.chart_data_cache:
+            df = get_klines(st.session_state.chart_symbol, st.session_state.chart_interval, 200)
+            st.session_state.chart_data_cache[cache_key] = df
+        else:
+            df = st.session_state.chart_data_cache[cache_key]
+        
+        if df is not None and len(df) > 0:
+            fig = make_subplots(
+                rows=2, cols=1,
+                shared_xaxes=True,
+                vertical_spacing=0.03,
+                row_heights=[0.7, 0.3],
+                subplot_titles=(f'{st.session_state.chart_symbol} - {st.session_state.chart_interval.upper()}', 'Volume')
+            )
+            
+            fig.add_trace(
+                go.Candlestick(
+                    x=df['timestamp'],
+                    open=df['open'],
+                    high=df['high'],
+                    low=df['low'],
+                    close=df['close'],
+                    name='Price',
+                    increasing_line_color='#26a69a',
+                    decreasing_line_color='#ef5350'
+                ),
+                row=1, col=1
+            )
+            
+            colors = ['#26a69a' if row['close'] >= row['open'] else '#ef5350' 
+                     for _, row in df.iterrows()]
+            
+            fig.add_trace(
+                go.Bar(
+                    x=df['timestamp'],
+                    y=df['volume'],
+                    name='Volume',
+                    marker_color=colors,
+                    opacity=0.6
+                ),
+                row=2, col=1
+            )
+            
+            fig.update_layout(
+                height=700,
+                template='plotly_dark',
+                xaxis_rangeslider_visible=False,
+                showlegend=False,
+                hovermode='x unified',
+                dragmode='pan',
+                modebar_add=['zoom2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d']
+            )
+            
+            fig.update_xaxes(fixedrange=False)
+            fig.update_yaxes(fixedrange=False)
+            
+            fig.update_xaxes(title_text="Time", row=2, col=1)
+            fig.update_yaxes(title_text="Price ($)", row=1, col=1)
+            fig.update_yaxes(title_text="Volume", row=2, col=1)
+            
+            st.plotly_chart(fig, use_container_width=True, config={
+                'scrollZoom': True,
+                'displayModeBar': True,
+                'displaylogo': False,
+                'modeBarButtonsToRemove': ['select2d', 'lasso2d']
+            })
+            
+            current = df.iloc[-1]
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Open", f"${current['open']:.2f}")
+            with col2:
+                st.metric("High", f"${current['high']:.2f}")
+            with col3:
+                st.metric("Low", f"${current['low']:.2f}")
+            with col4:
+                st.metric("Close", f"${current['close']:.2f}")
+        
+        st.markdown("---")
+
+chart_display()
 
 # ============================================
-# CONTROL PANEL
+# CONTROL PANEL (Fragment with auto-refresh for price)
 # ============================================
 st.markdown("---")
 st.markdown("### 🎛️ Control Panel")
@@ -552,7 +559,6 @@ with col1:
     )
     if selected_symbol != st.session_state.selected_symbol:
         st.session_state.selected_symbol = selected_symbol
-        st.rerun()
 
 with col2:
     timezone_options = ["Asia/Ho_Chi_Minh", "America/New_York", "Europe/London", "Asia/Tokyo"]
@@ -564,7 +570,6 @@ with col2:
     )
     if timezone != st.session_state.selected_timezone:
         st.session_state.selected_timezone = timezone
-        st.rerun()
 
 with col3:
     st.write("")
@@ -580,22 +585,26 @@ with col3:
 
 with col4:
     st.write("")
-    # Real-time price display
-    current_ticker = get_ticker_realtime(st.session_state.selected_symbol)
-    if current_ticker:
-        change_pct = current_ticker['change_percent']
-        is_up = change_pct >= 0
-        price_class = "control-price-up" if is_up else "control-price-down"
-        
-        st.markdown(f"""
-        <div class="control-price-box">
-            <div class="control-symbol">{st.session_state.selected_symbol}</div>
-            <div class="{price_class}">${current_ticker['price']:,.2f}</div>
-            <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">
-                {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
+    
+    @st.fragment(run_every="0.5s")
+    def price_display():
+        current_ticker = get_ticker_realtime(st.session_state.selected_symbol)
+        if current_ticker:
+            change_pct = current_ticker['change_percent']
+            is_up = change_pct >= 0
+            price_class = "control-price-up" if is_up else "control-price-down"
+            
+            st.markdown(f"""
+            <div class="control-price-box">
+                <div class="control-symbol">{st.session_state.selected_symbol}</div>
+                <div class="{price_class}">${current_ticker['price']:,.2f}</div>
+                <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">
+                    {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
+                </div>
             </div>
-        </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
+    
+    price_display()
 
 # ============================================
 # RUN ANALYSIS
