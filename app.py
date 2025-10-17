@@ -366,6 +366,7 @@ def calculate_trading_signal(predictor, timeframe):
 st.markdown("""
 <div class="header-container">
     <h1 class="header-title">🔮 Crypto Prediction</h1>
+    <p class="header-subtitle">AI-Powered Real-time Market Analysis & Trading Signals</p>
 </div>
 """, unsafe_allow_html=True)
 
