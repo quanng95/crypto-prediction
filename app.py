@@ -427,13 +427,13 @@ def ticker_carousel():
 ticker_carousel()
 
 # ============================================
-# CHART CONTAINER
+# CHART CONTAINER - ĐƯA RA NGOÀI FRAGMENT
 # ============================================
 if st.session_state.show_chart:
     st.markdown("---")
     st.markdown("## 📈 Candlestick Chart")
     
-    col1, col2, col3 = st.columns([3, 3, 1])
+    col1, col2, col3 = st.columns([2, 2, 1])
     
     with col1:
         st.markdown(f"### {st.session_state.chart_symbol}")
@@ -450,8 +450,7 @@ if st.session_state.show_chart:
             st.rerun()
     
     with col3:
-        st.write("")
-        if st.button("❌ Close", type="primary", key="close_chart_btn", use_container_width=True):
+        if st.button("❌ Close", type="primary", key="close_chart_btn"):
             st.session_state.show_chart = False
             st.rerun()
     
@@ -526,7 +525,6 @@ if st.session_state.show_chart:
             'modeBarButtonsToRemove': ['select2d', 'lasso2d']
         })
         
-        # Metrics ở dưới chart
         current = df.iloc[-1]
         col1, col2, col3, col4 = st.columns(4)
         
@@ -544,6 +542,7 @@ if st.session_state.show_chart:
 # ============================================
 # CONTROL PANEL - CHỈ RENDER 1 LẦN
 # ============================================
+# Kiểm tra xem có đang trong quá trình run analysis không
 if not st.session_state.trigger_analysis:
     st.markdown("---")
     st.markdown("### 🎛️ Control Panel")
