@@ -415,7 +415,7 @@ def ticker_carousel():
                     if st.button("📊 Chart", key=f"chart_{symbol}", use_container_width=True, type="secondary"):
                         st.session_state.show_chart = True
                         st.session_state.chart_symbol = symbol
-                        st.rerun()  # ← THÊM RERUN ĐỂ MỞ CHART NGAY
+                        st.rerun()
     
     # Next button
     with nav_col2:
@@ -540,68 +540,70 @@ if st.session_state.show_chart:
     st.markdown("---")
 
 # ============================================
-# CONTROL PANEL (Fragment with auto-refresh for price)
+# CONTROL PANEL - CHỈ RENDER 1 LẦN
 # ============================================
-st.markdown("---")
-st.markdown("### 🎛️ Control Panel")
-
-col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
-
-with col1:
-    selected_symbol = st.selectbox(
-        "📊 Symbol", 
-        SYMBOLS, 
-        index=SYMBOLS.index(st.session_state.selected_symbol),
-        key="symbol_select_main"
-    )
-    if selected_symbol != st.session_state.selected_symbol:
-        st.session_state.selected_symbol = selected_symbol
-
-with col2:
-    timezone_options = ["Asia/Ho_Chi_Minh", "America/New_York", "Europe/London", "Asia/Tokyo"]
-    timezone = st.selectbox(
-        "🌍 Timezone",
-        timezone_options,
-        index=timezone_options.index(st.session_state.selected_timezone),
-        key="timezone_select_main"
-    )
-    if timezone != st.session_state.selected_timezone:
-        st.session_state.selected_timezone = timezone
-
-with col3:
-    st.write("")
-    st.write("")
-    if st.button(
-        "🚀 Run Analysis", 
-        type="primary", 
-        use_container_width=True,
-        key="run_analysis_main"
-    ):
-        st.session_state.trigger_analysis = True
-        st.rerun()
-
-with col4:
-    st.write("")
+# Kiểm tra xem có đang trong quá trình run analysis không
+if not st.session_state.trigger_analysis:
+    st.markdown("---")
+    st.markdown("### 🎛️ Control Panel")
     
-    @st.fragment(run_every="0.5s")
-    def price_display():
-        current_ticker = get_ticker_realtime(st.session_state.selected_symbol)
-        if current_ticker:
-            change_pct = current_ticker['change_percent']
-            is_up = change_pct >= 0
-            price_class = "control-price-up" if is_up else "control-price-down"
-            
-            st.markdown(f"""
-            <div class="control-price-box">
-                <div class="control-symbol">{st.session_state.selected_symbol}</div>
-                <div class="{price_class}">${current_ticker['price']:,.2f}</div>
-                <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">
-                    {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
+    col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
+    
+    with col1:
+        selected_symbol = st.selectbox(
+            "📊 Symbol", 
+            SYMBOLS, 
+            index=SYMBOLS.index(st.session_state.selected_symbol),
+            key="symbol_select_main"
+        )
+        if selected_symbol != st.session_state.selected_symbol:
+            st.session_state.selected_symbol = selected_symbol
+    
+    with col2:
+        timezone_options = ["Asia/Ho_Chi_Minh", "America/New_York", "Europe/London", "Asia/Tokyo"]
+        timezone = st.selectbox(
+            "🌍 Timezone",
+            timezone_options,
+            index=timezone_options.index(st.session_state.selected_timezone),
+            key="timezone_select_main"
+        )
+        if timezone != st.session_state.selected_timezone:
+            st.session_state.selected_timezone = timezone
+    
+    with col3:
+        st.write("")
+        st.write("")
+        if st.button(
+            "🚀 Run Analysis", 
+            type="primary", 
+            use_container_width=True,
+            key="run_analysis_main"
+        ):
+            st.session_state.trigger_analysis = True
+            st.rerun()
+    
+    with col4:
+        st.write("")
+        
+        @st.fragment(run_every="0.5s")
+        def price_display():
+            current_ticker = get_ticker_realtime(st.session_state.selected_symbol)
+            if current_ticker:
+                change_pct = current_ticker['change_percent']
+                is_up = change_pct >= 0
+                price_class = "control-price-up" if is_up else "control-price-down"
+                
+                st.markdown(f"""
+                <div class="control-price-box">
+                    <div class="control-symbol">{st.session_state.selected_symbol}</div>
+                    <div class="{price_class}">${current_ticker['price']:,.2f}</div>
+                    <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">
+                        {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
+                    </div>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    price_display()
+                """, unsafe_allow_html=True)
+        
+        price_display()
 
 # ============================================
 # RUN ANALYSIS
