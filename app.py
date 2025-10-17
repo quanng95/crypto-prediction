@@ -54,7 +54,7 @@ st.markdown("""
         opacity: 0.9;
     }
     
-    /* Control price box */
+    /* Control price box - CÂN BẰNG */
     .control-price-box {
         background-color: #2d2d2d;
         padding: 10px;
@@ -123,7 +123,7 @@ st.markdown("""
         font-size: 28px !important;
     }
     
-    /* ẨN RUNNING INDICATOR */
+    /* ẨN RUNNING INDICATOR - QUAN TRỌNG */
     [data-testid="stStatusWidget"] {
         visibility: hidden;
         height: 0px;
@@ -357,43 +357,6 @@ def calculate_trading_signal(predictor, timeframe):
         'mid_term_change': mid_change
     }
 
-def create_mini_chart(symbol, interval='1h'):
-    """Create mini sparkline chart"""
-    df = get_klines(symbol, interval, 50)
-    
-    if df is None or len(df) == 0:
-        return None
-    
-    fig = go.Figure()
-    
-    # Determine color based on trend
-    first_price = df['close'].iloc[0]
-    last_price = df['close'].iloc[-1]
-    color = '#27ae60' if last_price >= first_price else '#e74c3c'
-    
-    fig.add_trace(go.Scatter(
-        x=df['timestamp'],
-        y=df['close'],
-        mode='lines',
-        line=dict(color=color, width=2),
-        fill='tozeroy',
-        fillcolor=f'rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.2)',
-        hovertemplate='%{y:.2f}<extra></extra>'
-    ))
-    
-    fig.update_layout(
-        height=100,
-        margin=dict(l=0, r=0, t=0, b=0),
-        xaxis=dict(visible=False),
-        yaxis=dict(visible=False),
-        showlegend=False,
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        hovermode='x'
-    )
-    
-    return fig
-
 # ============================================
 # BEAUTIFUL HEADER
 # ============================================
@@ -405,11 +368,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================
-# TICKER CAROUSEL with Mini Charts
+# TICKER CAROUSEL (Auto-refresh)
 # ============================================
 @st.fragment
 def ticker_carousel():
-    """Ticker carousel with auto-refresh and mini charts"""
+    """Ticker carousel with auto-refresh"""
     count = st_autorefresh(interval=500, limit=None, key="ticker_refresh")
     
     st.markdown("---")
@@ -426,7 +389,7 @@ def ticker_carousel():
                 st.session_state.ticker_start_index -= visible_count
                 st.rerun()
     
-    # Display tickers with mini charts
+    # Display tickers
     for idx, col in enumerate(ticker_cols):
         symbol_idx = start_idx + idx
         if symbol_idx < len(SYMBOLS):
@@ -439,34 +402,19 @@ def ticker_carousel():
                     change_pct = ticker_data['change_percent']
                     is_up = change_pct >= 0
                     
-                    # Display ticker info
+                    # Ticker info display
                     st.markdown(f"""
-                    <div style='text-align: center; padding: 10px; background-color: #2d2d2d; border-radius: 8px; margin-bottom: 5px;'>
-                        <div style='font-weight: bold; font-size: 16px; color: #ffffff;'>{symbol}</div>
-                        <div style='font-size: 24px; font-weight: bold; color: {"#27ae60" if is_up else "#e74c3c"};'>
-                            ${ticker_data['price']:,.2f}
-                        </div>
-                        <div style='font-size: 14px; color: {"#27ae60" if is_up else "#e74c3c"};'>
-                            {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
-                        </div>
+                    <div style="background-color: #2d2d2d; padding: 15px; border-radius: 8px; border: 1px solid #3d3d3d; text-align: center;">
+                        <div style="color: #ffffff; font-weight: bold; font-size: 16px; margin-bottom: 8px;">{symbol}</div>
+                        <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-weight: bold; font-size: 24px; margin-bottom: 5px;">${ticker_data['price']:,.2f}</div>
+                        <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">{'▲' if is_up else '▼'} {abs(change_pct):.2f}%</div>
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # Mini chart
-                    mini_chart = create_mini_chart(symbol, '1h')
-                    if mini_chart:
-                        st.plotly_chart(mini_chart, use_container_width=True, config={'displayModeBar': False})
-                    
-                    # Chart button
-                    if st.button(
-                        "📊 Chart",
-                        key=f"chart_btn_{symbol}_{count}",
-                        use_container_width=True,
-                        type="secondary"
-                    ):
+                    # Chart button below ticker
+                    if st.button("📊 Chart", key=f"chart_{symbol}_{count}", use_container_width=True, type="secondary"):
                         st.session_state.show_chart = True
                         st.session_state.chart_symbol = symbol
-                        st.session_state.chart_interval = "1h"
                         st.rerun()
     
     # Next button
@@ -476,80 +424,35 @@ def ticker_carousel():
                 st.session_state.ticker_start_index += visible_count
                 st.rerun()
 
+# ============================================
+# REAL-TIME PRICE DISPLAY (Auto-refresh)
+# ============================================
+@st.fragment
+def realtime_price_display():
+    """Display real-time price for selected symbol"""
+    count = st_autorefresh(interval=500, limit=None, key="price_refresh")
+    
+    current_ticker = get_ticker_realtime(st.session_state.selected_symbol)
+    if current_ticker:
+        change_pct = current_ticker['change_percent']
+        is_up = change_pct >= 0
+        price_class = "control-price-up" if is_up else "control-price-down"
+        
+        st.markdown(f"""
+        <div class="control-price-box">
+            <div class="control-symbol">{st.session_state.selected_symbol}</div>
+            <div class="{price_class}">${current_ticker['price']:,.2f}</div>
+            <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">
+                {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
 # Call ticker carousel
 ticker_carousel()
 
 # ============================================
-# CONTROL PANEL
-# ============================================
-st.markdown("---")
-st.markdown("### 🎛️ Control Panel")
-
-col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
-
-with col1:
-    selected_symbol = st.selectbox(
-        "📊 Symbol", 
-        SYMBOLS, 
-        index=SYMBOLS.index(st.session_state.selected_symbol),
-        key="symbol_select_main"
-    )
-    if selected_symbol != st.session_state.selected_symbol:
-        st.session_state.selected_symbol = selected_symbol
-        st.rerun()
-
-with col2:
-    timezone_options = ["Asia/Ho_Chi_Minh", "America/New_York", "Europe/London", "Asia/Tokyo"]
-    timezone = st.selectbox(
-        "🌍 Timezone",
-        timezone_options,
-        index=timezone_options.index(st.session_state.selected_timezone),
-        key="timezone_select_main"
-    )
-    if timezone != st.session_state.selected_timezone:
-        st.session_state.selected_timezone = timezone
-        st.rerun()
-
-with col3:
-    st.write("")
-    st.write("")
-    if st.button(
-        "🚀 Run Analysis", 
-        type="primary", 
-        use_container_width=True,
-        key="run_analysis_main"
-    ):
-        st.session_state.trigger_analysis = True
-        st.rerun()
-
-with col4:
-    st.write("")
-    
-    @st.fragment
-    def realtime_price_display():
-        """Display real-time price for selected symbol"""
-        count = st_autorefresh(interval=500, limit=None, key="price_refresh")
-        
-        current_ticker = get_ticker_realtime(st.session_state.selected_symbol)
-        if current_ticker:
-            change_pct = current_ticker['change_percent']
-            is_up = change_pct >= 0
-            price_class = "control-price-up" if is_up else "control-price-down"
-            
-            st.markdown(f"""
-            <div class="control-price-box">
-                <div class="control-symbol">{st.session_state.selected_symbol}</div>
-                <div class="{price_class}">${current_ticker['price']:,.2f}</div>
-                <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">
-                    {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    realtime_price_display()
-
-# ============================================
-# CANDLESTICK CHART MODAL
+# CANDLESTICK CHART (Separate section - can be opened anytime)
 # ============================================
 if st.session_state.show_chart:
     st.markdown("---")
@@ -569,10 +472,9 @@ if st.session_state.show_chart:
         )
         if interval != st.session_state.chart_interval:
             st.session_state.chart_interval = interval
-            st.rerun()
     
     with col3:
-        if st.button("❌ Close Chart", type="primary", key="close_chart_btn", use_container_width=True):
+        if st.button("❌ Close Chart", type="primary", key="close_chart_btn"):
             st.session_state.show_chart = False
             st.rerun()
     
@@ -654,10 +556,57 @@ if st.session_state.show_chart:
     st.markdown("---")
 
 # ============================================
-# RUN ANALYSIS
+# CONTROL PANEL (Static - No auto-refresh)
+# ============================================
+st.markdown("---")
+st.markdown("### 🎛️ Control Panel")
+
+col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
+
+with col1:
+    selected_symbol = st.selectbox(
+        "📊 Symbol", 
+        SYMBOLS, 
+        index=SYMBOLS.index(st.session_state.selected_symbol),
+        key="symbol_select_main"
+    )
+    if selected_symbol != st.session_state.selected_symbol:
+        st.session_state.selected_symbol = selected_symbol
+        st.rerun()
+
+with col2:
+    timezone_options = ["Asia/Ho_Chi_Minh", "America/New_York", "Europe/London", "Asia/Tokyo"]
+    timezone = st.selectbox(
+        "🌍 Timezone",
+        timezone_options,
+        index=timezone_options.index(st.session_state.selected_timezone),
+        key="timezone_select_main"
+    )
+    if timezone != st.session_state.selected_timezone:
+        st.session_state.selected_timezone = timezone
+        st.rerun()
+
+with col3:
+    st.write("")  # Spacing line 1
+    st.write("")  # Spacing line 2
+    if st.button(
+        "🚀 Run Analysis", 
+        type="primary", 
+        use_container_width=True,
+        key="run_analysis_main"
+    ):
+        st.session_state.trigger_analysis = True
+        st.rerun()
+
+with col4:
+    st.write("")  # Spacing line 1 (để cân với label của col1, col2)
+    realtime_price_display()
+
+# ============================================
+# RUN ANALYSIS (Triggered by flag)
 # ============================================
 if st.session_state.trigger_analysis:
-    st.session_state.trigger_analysis = False
+    st.session_state.trigger_analysis = False  # Reset flag immediately
     
     with st.spinner(f"🔄 Analyzing {st.session_state.selected_symbol}..."):
         try:
