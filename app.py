@@ -217,10 +217,6 @@ if 'last_refresh' not in st.session_state:
     st.session_state.last_refresh = time.time()
 if 'chart_data_cache' not in st.session_state:
     st.session_state.chart_data_cache = {}
-if 'analysis_running' not in st.session_state:
-    st.session_state.analysis_running = False
-if 'results_rendered' not in st.session_state:
-    st.session_state.results_rendered = False
 
 # Initialize WebSocket
 if 'ws_handler' not in st.session_state:
@@ -415,7 +411,7 @@ def ticker_carousel():
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # Chart button
+                    # Chart button - TRIGGER RERUN để mở chart ngay
                     if st.button("📊 Chart", key=f"chart_{symbol}", use_container_width=True, type="secondary"):
                         st.session_state.show_chart = True
                         st.session_state.chart_symbol = symbol
@@ -431,7 +427,7 @@ def ticker_carousel():
 ticker_carousel()
 
 # ============================================
-# CHART CONTAINER
+# CHART CONTAINER - ĐƯA RA NGOÀI FRAGMENT
 # ============================================
 if st.session_state.show_chart:
     st.markdown("---")
@@ -544,9 +540,10 @@ if st.session_state.show_chart:
     st.markdown("---")
 
 # ============================================
-# CONTROL PANEL
+# CONTROL PANEL - CHỈ RENDER 1 LẦN
 # ============================================
-if not st.session_state.analysis_running:
+# Kiểm tra xem có đang trong quá trình run analysis không
+if not st.session_state.trigger_analysis:
     st.markdown("---")
     st.markdown("### 🎛️ Control Panel")
     
@@ -583,8 +580,6 @@ if not st.session_state.analysis_running:
             key="run_analysis_main"
         ):
             st.session_state.trigger_analysis = True
-            st.session_state.analysis_running = True
-            st.session_state.results_rendered = False
             st.rerun()
     
     with col4:
@@ -611,10 +606,9 @@ if not st.session_state.analysis_running:
         price_display()
 
 # ============================================
-# RUN ANALYSIS - FIX DUPLICATE ISSUE
+# RUN ANALYSIS
 # ============================================
-if st.session_state.trigger_analysis and not st.session_state.results_rendered:
-    # Reset trigger ngay lập tức
+if st.session_state.trigger_analysis:
     st.session_state.trigger_analysis = False
     
     with st.spinner(f"🔄 Analyzing {st.session_state.selected_symbol}..."):
@@ -636,23 +630,19 @@ if st.session_state.trigger_analysis and not st.session_state.results_rendered:
             
             st.session_state.predictor = predictor
             st.session_state.predictions = all_predictions
-            st.session_state.analysis_running = False
-            st.session_state.results_rendered = True
             
-            time.sleep(0.5)
+            time.sleep(1)
             progress_bar.empty()
             status_text.empty()
             
             st.success(f"✅ Analysis completed for {st.session_state.selected_symbol}!")
+            st.rerun()
             
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
-            st.session_state.trigger_analysis = False
-            st.session_state.analysis_running = False
-            st.session_state.results_rendered = False
 
 # ============================================
-# RESULTS DISPLAY - FIX DUPLICATE
+# RESULTS DISPLAY
 # ============================================
 if st.session_state.predictor is not None and st.session_state.predictions is not None:
     predictor = st.session_state.predictor
@@ -664,7 +654,6 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
     st.markdown("---")
     st.markdown("## 📊 Analysis Results")
     
-    # BỎ KEY TRONG st.tabs() - đây là nguyên nhân lỗi
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "🎯 Trading Signals",
         "📈 Summary",
@@ -678,7 +667,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
     with tab1:
         st.markdown("### 🎯 Trading Signals & Recommendations")
         
-        for idx, timeframe in enumerate(['4h', '1d', '1w']):
+        for timeframe in ['4h', '1d', '1w']:
             signal_data = calculate_trading_signal(predictor, timeframe)
             
             if signal_data:
@@ -697,9 +686,6 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                     signal_emoji = "➡️"
                     signal_color = "#95a5a6"
                 
-                # Key duy nhất cho mỗi signal
-                signal_key = f"signal_{timeframe}_{idx}_{id(predictor)}"
-                
                 st.markdown(f"""
                 <div class="{box_class}">
                     <h3 style="color: {signal_color};">{signal_emoji} {timeframe.upper()} - {signal} Signal</h3>
@@ -710,53 +696,41 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                 
                 with col1:
                     st.markdown("#### 📊 Market Sentiment")
-                    st.metric("Confidence", f"{signal_data['confidence']:.1f}%", key=f"{signal_key}_conf")
+                    st.metric("Confidence", f"{signal_data['confidence']:.1f}%")
                     st.metric("Bull Probability", f"{signal_data['bull_prob']:.1f}%", 
-                             delta=f"{signal_data['bull_prob'] - 50:+.1f}%",
-                             key=f"{signal_key}_bull")
+                             delta=f"{signal_data['bull_prob'] - 50:+.1f}%")
                     st.metric("Bear Probability", f"{signal_data['bear_prob']:.1f}%",
-                             delta=f"{signal_data['bear_prob'] - 50:+.1f}%",
-                             key=f"{signal_key}_bear")
+                             delta=f"{signal_data['bear_prob'] - 50:+.1f}%")
                 
                 with col2:
                     st.markdown("#### 💰 Entry & Risk Management")
-                    st.metric("Current Price", f"${signal_data['current_price']:.2f}",
-                             key=f"{signal_key}_curr")
+                    st.metric("Current Price", f"${signal_data['current_price']:.2f}")
                     st.metric("Entry Price", f"${signal_data['entry']:.2f}",
-                             delta=f"{((signal_data['entry']/signal_data['current_price']-1)*100):+.2f}%",
-                             key=f"{signal_key}_entry")
+                             delta=f"{((signal_data['entry']/signal_data['current_price']-1)*100):+.2f}%")
                     st.metric("Stop Loss", f"${signal_data['stop_loss']:.2f}",
                              delta=f"{((signal_data['stop_loss']/signal_data['entry']-1)*100):+.2f}%",
-                             delta_color="inverse",
-                             key=f"{signal_key}_sl")
+                             delta_color="inverse")
                 
                 with col3:
                     st.markdown("#### 🎯 Take Profit Targets")
                     st.metric("TP1 (Conservative)", f"${signal_data['tp1']:.2f}",
-                             delta=f"{((signal_data['tp1']/signal_data['entry']-1)*100):+.2f}%",
-                             key=f"{signal_key}_tp1")
+                             delta=f"{((signal_data['tp1']/signal_data['entry']-1)*100):+.2f}%")
                     st.metric("TP2 (Moderate)", f"${signal_data['tp2']:.2f}",
-                             delta=f"{((signal_data['tp2']/signal_data['entry']-1)*100):+.2f}%",
-                             key=f"{signal_key}_tp2")
+                             delta=f"{((signal_data['tp2']/signal_data['entry']-1)*100):+.2f}%")
                     st.metric("TP3 (Aggressive)", f"${signal_data['tp3']:.2f}",
-                             delta=f"{((signal_data['tp3']/signal_data['entry']-1)*100):+.2f}%",
-                             key=f"{signal_key}_tp3")
+                             delta=f"{((signal_data['tp3']/signal_data['entry']-1)*100):+.2f}%")
                 
                 st.markdown("#### 📈 Model Performance")
                 col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
-                    st.metric("Direction Accuracy", f"{signal_data['accuracy']:.1f}%",
-                             key=f"{signal_key}_acc")
+                    st.metric("Direction Accuracy", f"{signal_data['accuracy']:.1f}%")
                 with col2:
-                    st.metric("R² Score", f"{signal_data['r2_score']:.4f}",
-                             key=f"{signal_key}_r2")
+                    st.metric("R² Score", f"{signal_data['r2_score']:.4f}")
                 with col3:
-                    st.metric("Short-term Trend", f"{signal_data['short_term_change']:+.2f}%",
-                             key=f"{signal_key}_short")
+                    st.metric("Short-term Trend", f"{signal_data['short_term_change']:+.2f}%")
                 with col4:
-                    st.metric("Mid-term Trend", f"{signal_data['mid_term_change']:+.2f}%",
-                             key=f"{signal_key}_mid")
+                    st.metric("Mid-term Trend", f"{signal_data['mid_term_change']:+.2f}%")
                 
                 st.markdown("---")
     
