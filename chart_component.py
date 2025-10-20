@@ -27,6 +27,18 @@ def render_tradingview_chart(df, symbol, interval):
         subplot_titles=(f'{symbol} - {interval.upper()}', 'Volume')
     )
     
+    # Prepare hover text for candlestick (KHÔNG DÙNG hovertemplate)
+    hover_texts = []
+    for _, row in df.iterrows():
+        text = (
+            f"{row['timestamp'].strftime('%Y-%m-%d %H:%M')}<br>"
+            f"O: ${row['open']:.2f}<br>"
+            f"H: ${row['high']:.2f}<br>"
+            f"L: ${row['low']:.2f}<br>"
+            f"C: ${row['close']:.2f}"
+        )
+        hover_texts.append(text)
+    
     # Add candlestick chart
     fig.add_trace(
         go.Candlestick(
@@ -38,12 +50,8 @@ def render_tradingview_chart(df, symbol, interval):
             name='Price',
             increasing_line_color='#26a69a',
             decreasing_line_color='#ef5350',
-            hovertemplate='<b>%{x|%Y-%m-%d %H:%M}</b><br>' +
-                         'O: %{open:.2f}<br>' +
-                         'H: %{high:.2f}<br>' +
-                         'L: %{low:.2f}<br>' +
-                         'C: %{close:.2f}<br>' +
-                         '<extra></extra>'
+            hovertext=hover_texts,  # ← DÙNG hovertext thay vì hovertemplate
+            hoverinfo='text'        # ← Hiển thị text
         ),
         row=1, col=1
     )
@@ -52,6 +60,9 @@ def render_tradingview_chart(df, symbol, interval):
     colors = ['#26a69a' if row['close'] >= row['open'] else '#ef5350' 
              for _, row in df.iterrows()]
     
+    # Prepare hover text for volume
+    volume_texts = [f"Vol: {vol:,.0f}" for vol in df['volume']]
+    
     fig.add_trace(
         go.Bar(
             x=df['timestamp'],
@@ -59,7 +70,8 @@ def render_tradingview_chart(df, symbol, interval):
             name='Volume',
             marker_color=colors,
             opacity=0.6,
-            hovertemplate='<b>Vol</b>: %{y:,.0f}<extra></extra>'
+            hovertext=volume_texts,  # ← DÙNG hovertext
+            hoverinfo='text'         # ← Hiển thị text
         ),
         row=2, col=1
     )
@@ -175,6 +187,7 @@ def render_tradingview_chart(df, symbol, interval):
             display: none;
             box-shadow: 0 2px 8px rgba(0,0,0,0.3);
             border: 1px solid rgba(255,255,255,0.2);
+            white-space: nowrap;
         }}
         
         .dynamic-price-label.up {{
