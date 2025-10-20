@@ -7,8 +7,8 @@ import requests
 from datetime import datetime
 import numpy as np
 
-# Import WebSocket handler
-from websocket_handler import BinanceWebSocket
+# Import WebSocket manager
+from websocket_handler import WebSocketManager
 
 # Import predictor
 from eth import AdvancedETHPredictor
@@ -17,7 +17,7 @@ from eth import AdvancedETHPredictor
 from methodology import render_methodology_tab
 
 # Import chart component
-from chart_component import render_tradingview_chart
+from chart_component import render_tradingview_chart_realtime
 
 # Page config
 st.set_page_config(
@@ -121,35 +121,30 @@ st.markdown("""
         font-size: 28px !important;
     }
     
-    /* ẨN RUNNING INDICATOR */
+    /* Hide Streamlit elements */
     [data-testid="stStatusWidget"] {
         visibility: hidden;
         height: 0px;
         position: fixed;
     }
     
-    /* ẨN HEADER STREAMLIT */
     header[data-testid="stHeader"] {
         display: none;
     }
     
-    /* ẨN TOOLBAR */
     [data-testid="stToolbar"] {
         display: none;
     }
     
-    /* ẨN FOOTER */
     footer {
         visibility: hidden;
         height: 0px;
     }
     
-    /* ẨN MENU */
     #MainMenu {
         visibility: hidden;
     }
     
-    /* ẨN DEPLOY BUTTON */
     .stDeployButton {
         display: none;
     }
@@ -199,7 +194,7 @@ if 'show_chart' not in st.session_state:
 if 'chart_symbol' not in st.session_state:
     st.session_state.chart_symbol = "ETHUSDT"
 if 'chart_interval' not in st.session_state:
-    st.session_state.chart_interval = "1h"
+    st.session_state.chart_interval = "15m"
 if 'predictor' not in st.session_state:
     st.session_state.predictor = None
 if 'predictions' not in st.session_state:
@@ -212,16 +207,12 @@ if 'selected_timezone' not in st.session_state:
     st.session_state.selected_timezone = "Asia/Ho_Chi_Minh"
 if 'trigger_analysis' not in st.session_state:
     st.session_state.trigger_analysis = False
-if 'last_refresh' not in st.session_state:
-    st.session_state.last_refresh = time.time()
-if 'chart_data_cache' not in st.session_state:
-    st.session_state.chart_data_cache = {}
 
-# Initialize WebSocket
-if 'ws_handler' not in st.session_state:
-    st.session_state.ws_handler = BinanceWebSocket()
-    st.session_state.ws_handler.start(SYMBOLS)
-    print("🚀 WebSocket initialized")
+# Initialize WebSocket Manager
+if 'ws_manager' not in st.session_state:
+    st.session_state.ws_manager = WebSocketManager()
+    st.session_state.ws_manager.start_price_stream(SYMBOLS)
+    print("🚀 WebSocket Manager initialized")
 
 @st.cache_data(ttl=5)
 def get_ticker(symbol):
@@ -242,7 +233,7 @@ def get_ticker(symbol):
 
 def get_ticker_realtime(symbol):
     """Get ticker from WebSocket (real-time) with REST API fallback"""
-    data = st.session_state.ws_handler.get_price(symbol)
+    data = st.session_state.ws_manager.get_price(symbol)
     
     if data and (time.time() - data['timestamp']) < 5:
         return data
@@ -465,11 +456,11 @@ def ticker_carousel():
 ticker_carousel()
 
 # ============================================
-# CHART CONTAINER - SỬ DỤNG COMPONENT
+# REAL-TIME CHART CONTAINER
 # ============================================
 if st.session_state.show_chart:
     st.markdown("---")
-    st.markdown("## 📈 Candlestick Chart")
+    st.markdown("## 📈 Real-Time Candlestick Chart")
     
     col1, col2, col3 = st.columns([2, 2, 1])
     
@@ -479,30 +470,48 @@ if st.session_state.show_chart:
     with col2:
         interval = st.selectbox(
             "Timeframe",
-            ['15m', '1h', '4h', '1d'],
-            index=['15m', '1h', '4h', '1d'].index(st.session_state.chart_interval),
+            ['1m', '5m', '15m', '1h', '4h', '1d'],
+            index=['1m', '5m', '15m', '1h', '4h', '1d'].index(st.session_state.chart_interval),
             key="chart_interval_select"
         )
         if interval != st.session_state.chart_interval:
+            # Stop old chart stream
+            st.session_state.ws_manager.stop_chart_stream(
+                st.session_state.chart_symbol,
+                st.session_state.chart_interval
+            )
             st.session_state.chart_interval = interval
             st.rerun()
     
     with col3:
         if st.button("❌ Close", type="primary", key="close_chart_btn"):
+            st.session_state.ws_manager.stop_chart_stream(
+                st.session_state.chart_symbol,
+                st.session_state.chart_interval
+            )
             st.session_state.show_chart = False
             st.rerun()
     
-    # Get chart data
-    cache_key = f"{st.session_state.chart_symbol}_{st.session_state.chart_interval}"
+    # Get initial historical data
+    with st.spinner("Loading initial chart data..."):
+        initial_df = get_klines(
+            st.session_state.chart_symbol,
+            st.session_state.chart_interval,
+            200
+        )
     
-    if cache_key not in st.session_state.chart_data_cache:
-        df = get_klines(st.session_state.chart_symbol, st.session_state.chart_interval, 200)
-        st.session_state.chart_data_cache[cache_key] = df
+    if initial_df is not None:
+        # Start chart WebSocket stream
+        chart_ws = st.session_state.ws_manager.start_chart_stream(
+            st.session_state.chart_symbol,
+            st.session_state.chart_interval,
+            initial_df
+        )
+        
+        # Render real-time chart
+        render_tradingview_chart_realtime(chart_ws)
     else:
-        df = st.session_state.chart_data_cache[cache_key]
-    
-    # Render TradingView-style chart
-    render_tradingview_chart(df, st.session_state.chart_symbol, st.session_state.chart_interval)
+        st.error("Failed to load chart data")
     
     st.markdown("---")
     st.stop()
@@ -904,10 +913,10 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
             fig = go.Figure()
             
             colors = {
-                '15m': '#f39c12',
-                '4h': '#3498db',
-                '1d': '#2ecc71',
-                '1w': '#9b59b6'
+                '15M': '#f39c12',
+                '4H': '#3498db',
+                '1D': '#2ecc71',
+                '1W': '#9b59b6'
             }
             
             for timeframe in ['15m', '4h', '1d', '1w']:
@@ -922,7 +931,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                             y=predictions,
                             mode='lines+markers',
                             name=timeframe.upper(),
-                            line=dict(width=3, color=colors.get(timeframe, '#ffffff')),
+                            line=dict(width=3, color=colors.get(timeframe.upper(), '#ffffff')),
                             marker=dict(size=8)
                         ))
             
@@ -968,8 +977,8 @@ st.markdown(
 # Cleanup WebSocket on app close
 import atexit
 def cleanup():
-    if 'ws_handler' in st.session_state:
-        st.session_state.ws_handler.stop()
-        print("🛑 WebSocket stopped")
+    if 'ws_manager' in st.session_state:
+        st.session_state.ws_manager.stop_all()
+        print("🛑 All WebSockets stopped")
 
 atexit.register(cleanup)
