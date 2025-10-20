@@ -195,7 +195,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Symbols
-SYMBOLS = ["ETHUSDT", "BTCUSDT", "PAXGUSDT", "BNBUSDT", "SOLUSDT", "DOGEUSDT", "KAITOUSDT", "ADAUSDT"]
+SYMBOLS = ["ETHUSDT", "BTCUSDT", "BNBUSDT", "SOLUSDT", "ADAUSDT", "DOGEUSDT", "ARBUSDT", "PAXGUSDT"]
 
 # Initialize session state
 if 'show_chart' not in st.session_state:
@@ -536,7 +536,13 @@ if st.session_state.show_chart:
                 close=df['close'],
                 name='Price',
                 increasing_line_color='#26a69a',
-                decreasing_line_color='#ef5350'
+                decreasing_line_color='#ef5350',
+                hovertemplate='<b>%{x|%Y-%m-%d %H:%M}</b><br>' +
+                             'Open: $%{open:.2f}<br>' +
+                             'High: $%{high:.2f}<br>' +
+                             'Low: $%{low:.2f}<br>' +
+                             'Close: $%{close:.2f}<br>' +
+                             '<extra></extra>'
             ),
             row=1, col=1
         )
@@ -550,34 +556,15 @@ if st.session_state.show_chart:
                 y=df['volume'],
                 name='Volume',
                 marker_color=colors,
-                opacity=0.6
+                opacity=0.6,
+                hovertemplate='<b>Volume</b><br>' +
+                             '%{y:,.0f}<br>' +
+                             '<extra></extra>'
             ),
             row=2, col=1
         )
         
         # ============================================
-        # CROSSHAIR CONFIGURATION
-        # ============================================
-        fig.update_layout(
-            height=700,
-            template='plotly_dark',
-            xaxis_rangeslider_visible=False,
-            showlegend=False,
-            hovermode='x unified',  # ← Unified hover cho cả 2 subplots
-            dragmode='pan',
-            modebar_add=['zoom2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d'],
-            
-            # HOVER LABEL STYLING
-            hoverlabel=dict(
-                bgcolor="#2d2d2d",
-                font_size=14,
-                font_family="monospace",
-                font_color="#ffffff",
-                bordercolor="#667eea"
-            )
-        )
-        
-                # ============================================
         # SPIKE LINES (CROSSHAIR LINES) - SIMPLE SOLUTION
         # ============================================
         
@@ -662,9 +649,28 @@ if st.session_state.show_chart:
         fig.update_xaxes(title_text="Time", row=2, col=1)
         fig.update_yaxes(title_text="Price ($)", row=1, col=1)
         fig.update_yaxes(title_text="Volume", row=2, col=1)
+        
+        st.plotly_chart(fig, use_container_width=True, config={
+            'scrollZoom': True,
+            'displayModeBar': True,
+            'displaylogo': False,
+            'modeBarButtonsToRemove': ['select2d', 'lasso2d']
+        })
+        
+        current = df.iloc[-1]
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Open", f"${current['open']:.2f}")
+        with col2:
+            st.metric("High", f"${current['high']:.2f}")
+        with col3:
+            st.metric("Low", f"${current['low']:.2f}")
+        with col4:
+            st.metric("Close", f"${current['close']:.2f}")
     
     st.markdown("---")
-    # STOP EXECUTION HERE
+    # STOP EXECUTION HERE - Không render phần dưới khi chart đang mở
     st.stop()
 
 # ============================================
