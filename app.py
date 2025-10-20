@@ -6,6 +6,7 @@ import time
 import requests
 from datetime import datetime
 import numpy as np
+from methodology import render_methodology_tab
 
 # Import WebSocket handler
 from websocket_handler import BinanceWebSocket
@@ -711,122 +712,91 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
     st.markdown("---")
     st.markdown("## 📊 Analysis Results")
     
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "🎯 Trading Signals",
         "📈 Summary",
         "⏰ 4H Predictions",
         "📅 1D Predictions",
         "📆 1W Predictions",
-        "🔮 Final Predictions"
+        "🔮 Final Predictions",
+        "📚 Methodology"
     ])
     
     # TAB 1: Trading Signals - BAO GỒM 15M
-    with tab1:
-        st.markdown("### 🎯 Trading Signals & Recommendations")
+with tab1:
+    st.markdown("### 🎯 Trading Signals & Recommendations")
+    
+    # THÊM 15m vào đầu loop
+    for timeframe in ['15m', '4h', '1d', '1w']:
+        signal_data = calculate_trading_signal(predictor, timeframe)
         
-        # THÊM 15m vào đầu loop
-        for timeframe in ['15m', '4h', '1d', '1w']:
-            signal_data = calculate_trading_signal(predictor, timeframe)
+        if signal_data:
+            signal = signal_data['signal']
             
-            if signal_data:
-                signal = signal_data['signal']
-                
-                # Style khác cho 15m scalping
-                if timeframe == '15m':
-                    if signal == "LONG":
-                        box_class = "signal-box signal-scalping"
-                        signal_emoji = "⚡"
-                        signal_color = "#f39c12"
-                    elif signal == "SHORT":
-                        box_class = "signal-box signal-scalping"
-                        signal_emoji = "⚡"
-                        signal_color = "#e67e22"
-                    else:
-                        box_class = "signal-box signal-neutral"
-                        signal_emoji = "➡️"
-                        signal_color = "#95a5a6"
-                    
-                    timeframe_label = "⚡ 15M SCALPING"
-                else:
-                    if signal == "LONG":
-                        box_class = "signal-box signal-long"
-                        signal_emoji = "📈"
-                        signal_color = "#27ae60"
-                    elif signal == "SHORT":
-                        box_class = "signal-box signal-short"
-                        signal_emoji = "📉"
-                        signal_color = "#e74c3c"
-                    else:
-                        box_class = "signal-box signal-neutral"
-                        signal_emoji = "➡️"
-                        signal_color = "#95a5a6"
-                    
-                    timeframe_label = timeframe.upper()
-                
-                st.markdown(f"""
-                <div class="{box_class}">
-                    <h3 style="color: {signal_color};">{signal_emoji} {timeframe_label} - {signal} Signal</h3>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    st.markdown("#### 📊 Market Sentiment")
-                    st.metric("Confidence", f"{signal_data['confidence']:.1f}%")
-                    st.metric("Bull Probability", f"{signal_data['bull_prob']:.1f}%", 
-                             delta=f"{signal_data['bull_prob'] - 50:+.1f}%")
-                    st.metric("Bear Probability", f"{signal_data['bear_prob']:.1f}%",
-                             delta=f"{signal_data['bear_prob'] - 50:+.1f}%")
-                
-                with col2:
-                    st.markdown("#### 💰 Entry & Risk Management")
-                    st.metric("Current Price", f"${signal_data['current_price']:.2f}")
-                    st.metric("Entry Price", f"${signal_data['entry']:.2f}",
-                             delta=f"{((signal_data['entry']/signal_data['current_price']-1)*100):+.2f}%")
-                    st.metric("Stop Loss", f"${signal_data['stop_loss']:.2f}",
-                             delta=f"{((signal_data['stop_loss']/signal_data['entry']-1)*100):+.2f}%",
-                             delta_color="inverse")
-                
-                with col3:
-                    st.markdown("#### 🎯 Take Profit Targets")
-                    tp1_label = "TP1 (Quick)" if timeframe == '15m' else "TP1 (Conservative)"
-                    tp2_label = "TP2 (Standard)" if timeframe == '15m' else "TP2 (Moderate)"
-                    tp3_label = "TP3 (Aggressive)" if timeframe == '15m' else "TP3 (Aggressive)"
-                    
-                    st.metric(tp1_label, f"${signal_data['tp1']:.2f}",
-                             delta=f"{((signal_data['tp1']/signal_data['entry']-1)*100):+.2f}%")
-                    st.metric(tp2_label, f"${signal_data['tp2']:.2f}",
-                             delta=f"{((signal_data['tp2']/signal_data['entry']-1)*100):+.2f}%")
-                    st.metric(tp3_label, f"${signal_data['tp3']:.2f}",
-                             delta=f"{((signal_data['tp3']/signal_data['entry']-1)*100):+.2f}%")
-                
-                st.markdown("#### 📈 Model Performance")
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    st.metric("Direction Accuracy", f"{signal_data['accuracy']:.1f}%")
-                with col2:
-                    st.metric("R² Score", f"{signal_data['r2_score']:.4f}")
-                with col3:
-                    st.metric("Short-term Trend", f"{signal_data['short_term_change']:+.2f}%")
-                with col4:
-                    st.metric("Mid-term Trend", f"{signal_data['mid_term_change']:+.2f}%")
-                
-                # Thêm tips cho scalping
-                if timeframe == '15m':
-                    st.markdown("#### 💡 Scalping Tips")
-                    st.info("""
-                    **15M Quick Trading Strategy:**
-                    - ✅ **Fast execution** - Enter/exit within 15-60 minutes
-                    - ✅ **Tight stops** - Only 0.5% stop loss
-                    - ✅ **Small targets** - 0.5-1.5% profit per trade
-                    - ✅ **High frequency** - Multiple trades per session
-                    - ⚠️ **Avoid news times** - High volatility = high risk
-                    - ⚠️ **Watch spreads** - Must be minimal for profitability
-                    """)
-                
-                st.markdown("---")
+            # STYLE CHUẨN CHO TẤT CẢ TIMEFRAMES
+            if signal == "LONG":
+                box_class = "signal-box signal-long"
+                signal_emoji = "📈"
+                signal_color = "#27ae60"
+            elif signal == "SHORT":
+                box_class = "signal-box signal-short"
+                signal_emoji = "📉"
+                signal_color = "#e74c3c"
+            else:
+                box_class = "signal-box signal-neutral"
+                signal_emoji = "➡️"
+                signal_color = "#95a5a6"
+            
+            # Label chuẩn cho tất cả
+            timeframe_label = timeframe.upper()
+            
+            st.markdown(f"""
+            <div class="{box_class}">
+                <h3 style="color: {signal_color};">{signal_emoji} {timeframe_label} - {signal} Signal</h3>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.markdown("#### 📊 Market Sentiment")
+                st.metric("Confidence", f"{signal_data['confidence']:.1f}%")
+                st.metric("Bull Probability", f"{signal_data['bull_prob']:.1f}%", 
+                         delta=f"{signal_data['bull_prob'] - 50:+.1f}%")
+                st.metric("Bear Probability", f"{signal_data['bear_prob']:.1f}%",
+                         delta=f"{signal_data['bear_prob'] - 50:+.1f}%")
+            
+            with col2:
+                st.markdown("#### 💰 Entry & Risk Management")
+                st.metric("Current Price", f"${signal_data['current_price']:.2f}")
+                st.metric("Entry Price", f"${signal_data['entry']:.2f}",
+                         delta=f"{((signal_data['entry']/signal_data['current_price']-1)*100):+.2f}%")
+                st.metric("Stop Loss", f"${signal_data['stop_loss']:.2f}",
+                         delta=f"{((signal_data['stop_loss']/signal_data['entry']-1)*100):+.2f}%",
+                         delta_color="inverse")
+            
+            with col3:
+                st.markdown("#### 🎯 Take Profit Targets")
+                st.metric("TP1 (Conservative)", f"${signal_data['tp1']:.2f}",
+                         delta=f"{((signal_data['tp1']/signal_data['entry']-1)*100):+.2f}%")
+                st.metric("TP2 (Moderate)", f"${signal_data['tp2']:.2f}",
+                         delta=f"{((signal_data['tp2']/signal_data['entry']-1)*100):+.2f}%")
+                st.metric("TP3 (Aggressive)", f"${signal_data['tp3']:.2f}",
+                         delta=f"{((signal_data['tp3']/signal_data['entry']-1)*100):+.2f}%")
+            
+            st.markdown("#### 📈 Model Performance")
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Direction Accuracy", f"{signal_data['accuracy']:.1f}%")
+            with col2:
+                st.metric("R² Score", f"{signal_data['r2_score']:.4f}")
+            with col3:
+                st.metric("Short-term Trend", f"{signal_data['short_term_change']:+.2f}%")
+            with col4:
+                st.metric("Mid-term Trend", f"{signal_data['mid_term_change']:+.2f}%")
+            
+            st.markdown("---")
     
     # TAB 2: Summary - THÊM 15M
     with tab2:
@@ -839,7 +809,7 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                 if best_model and best_model in predictor.all_model_results[timeframe]:
                     result = predictor.all_model_results[timeframe][best_model]
                     
-                    timeframe_display = "15M (Scalping)" if timeframe == '15m' else timeframe.upper()
+                    timeframe_display = "15M" if timeframe == '15m' else timeframe.upper()
                     
                     perf_data.append({
                         'Timeframe': timeframe_display,
@@ -1084,7 +1054,9 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
                 'displayModeBar': True,
                 'displaylogo': False
             })
-
+    # TAB 7: Methodology
+    with tab7:
+        render_methodology_tab(predictor)
 # Footer
 st.markdown("---")
 st.markdown(
