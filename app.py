@@ -191,7 +191,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Symbols
-SYMBOLS = ["ETHUSDT", "BTCUSDT", "PAXGUSDT", "BNBUSDT", "SOLUSDT", "DOGEUSDT", "KAITOUSDT", "ADAUSDT"]
+SYMBOLS = ["ETHUSDT", "BTCUSDT", "PAXGUSDT", "BNBUSDT", "SOLUSDT", "LINKUSDT", "PEPEUSDT", "XRPUSDT", "DOGEUSDT", "KAITOUSDT", "ADAUSDT"]
 
 # Initialize session state
 if 'show_chart' not in st.session_state:
@@ -417,19 +417,24 @@ st.markdown("""
 # ============================================
 @st.fragment(run_every="0.5s")
 def ticker_carousel():
-    """Ticker carousel with auto-refresh"""
+    """Ticker carousel with auto-refresh and loop navigation"""
     st.markdown("---")
     
     visible_count = 4
+    total_symbols = len(SYMBOLS)
     start_idx = st.session_state.ticker_start_index
     
     nav_col1, *ticker_cols, nav_col2 = st.columns([1, 2, 2, 2, 2, 1])
     
     with nav_col1:
         if st.button("◀", key="prev_btn", help="Previous symbols"):
-            if st.session_state.ticker_start_index > 0:
+            # Nếu đang ở đầu list, quay về cuối
+            if st.session_state.ticker_start_index == 0:
+                # Tính vị trí cuối cùng sao cho hiển thị đủ 4 symbols
+                st.session_state.ticker_start_index = total_symbols - visible_count
+            else:
                 st.session_state.ticker_start_index -= visible_count
-                st.rerun()
+            st.rerun()
     
     for idx, col in enumerate(ticker_cols):
         symbol_idx = start_idx + idx
@@ -458,9 +463,12 @@ def ticker_carousel():
     
     with nav_col2:
         if st.button("▶", key="next_btn", help="Next symbols"):
-            if st.session_state.ticker_start_index + visible_count < len(SYMBOLS):
+            # Nếu đang ở cuối list, quay về đầu
+            if st.session_state.ticker_start_index + visible_count >= total_symbols:
+                st.session_state.ticker_start_index = 0
+            else:
                 st.session_state.ticker_start_index += visible_count
-                st.rerun()
+            st.rerun()
 
 ticker_carousel()
 
