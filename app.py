@@ -555,19 +555,52 @@ if st.session_state.show_chart:
             row=2, col=1
         )
         
+        # ============================================
+        # CROSSHAIR CONFIGURATION
+        # ============================================
         fig.update_layout(
             height=700,
             template='plotly_dark',
             xaxis_rangeslider_visible=False,
             showlegend=False,
-            hovermode='x unified',
+            hovermode='x unified',  # ← Unified hover cho cả 2 subplots
             dragmode='pan',
-            modebar_add=['zoom2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d']
+            modebar_add=['zoom2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d'],
+            
+            # HOVER LABEL STYLING
+            hoverlabel=dict(
+                bgcolor="#2d2d2d",
+                font_size=14,
+                font_family="monospace",
+                font_color="#ffffff",
+                bordercolor="#667eea"
+            )
         )
         
-        fig.update_xaxes(fixedrange=False)
-        fig.update_yaxes(fixedrange=False)
+        # ============================================
+        # SPIKE LINES (CROSSHAIR LINES)
+        # ============================================
+        fig.update_xaxes(
+            fixedrange=False,
+            showspikes=True,           # ← Bật spike line dọc
+            spikemode='across',        # ← Kéo dài qua toàn bộ chart
+            spikesnap='cursor',        # ← Snap theo cursor
+            spikecolor='rgba(255,255,255,0.5)',  # ← Màu trắng trong suốt
+            spikethickness=1,          # ← Độ dày line
+            spikedash='dot'            # ← Kiểu đứt nét
+        )
         
+        fig.update_yaxes(
+            fixedrange=False,
+            showspikes=True,           # ← Bật spike line ngang
+            spikemode='across',        # ← Kéo dài qua toàn bộ chart
+            spikesnap='cursor',        # ← Snap theo cursor
+            spikecolor='rgba(255,255,255,0.5)',  # ← Màu trắng trong suốt
+            spikethickness=1,          # ← Độ dày line
+            spikedash='dot'            # ← Kiểu đứt nét
+        )
+        
+        # Labels cho axes
         fig.update_xaxes(title_text="Time", row=2, col=1)
         fig.update_yaxes(title_text="Price ($)", row=1, col=1)
         fig.update_yaxes(title_text="Volume", row=2, col=1)
@@ -592,7 +625,7 @@ if st.session_state.show_chart:
             st.metric("Close", f"${current['close']:.2f}")
     
     st.markdown("---")
-    # STOP EXECUTION HERE - Không render phần dưới khi chart đang mở
+    # STOP EXECUTION HERE
     st.stop()
 
 # ============================================
