@@ -16,6 +16,9 @@ from eth import AdvancedETHPredictor
 # Import methodology tab
 from methodology import render_methodology_tab
 
+# Import chart component
+from chart_component import render_tradingview_chart
+
 # Page config
 st.set_page_config(
     page_title="🔮 Crypto Prediction",
@@ -47,13 +50,6 @@ st.markdown("""
         font-weight: bold;
         margin: 0;
         text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-    }
-    
-    .header-subtitle {
-        color: #e0e0ff;
-        font-size: 18px;
-        margin-top: 10px;
-        opacity: 0.9;
     }
     
     /* Control price box */
@@ -195,7 +191,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Symbols
-SYMBOLS = ["ETHUSDT", "BTCUSDT", "BNBUSDT", "SOLUSDT", "ADAUSDT", "DOGEUSDT", "ARBUSDT", "PAXGUSDT"]
+SYMBOLS = ["ETHUSDT", "BTCUSDT", "PAXGUSDT", "BNBUSDT", "SOLUSDT", "DOGEUSDT", "KAITOUSDT", "ADAUSDT"]
 
 # Initialize session state
 if 'show_chart' not in st.session_state:
@@ -248,11 +244,9 @@ def get_ticker_realtime(symbol):
     """Get ticker from WebSocket (real-time) with REST API fallback"""
     data = st.session_state.ws_handler.get_price(symbol)
     
-    # Check if data is fresh (< 5 seconds old)
     if data and (time.time() - data['timestamp']) < 5:
         return data
     
-    # Fallback to REST API
     return get_ticker(symbol)
 
 @st.cache_data(ttl=60)
@@ -299,11 +293,9 @@ def calculate_trading_signal(predictor, timeframe):
     
     current_price = predictor.reference_price
     
-    # LOGIC KHÁC NHAU CHO SCALPING (15M) VS SWING TRADING
     if timeframe == '15m':
-        # SCALPING: Nhạy hơn, threshold thấp hơn
-        short_term = predictions[:2]     # Chỉ 2 periods đầu (30 phút)
-        mid_term = predictions[2:4]      # 2 periods tiếp (30-60 phút)
+        short_term = predictions[:2]
+        mid_term = predictions[2:4]
         
         avg_short = np.mean(short_term)
         avg_mid = np.mean(mid_term)
@@ -311,7 +303,6 @@ def calculate_trading_signal(predictor, timeframe):
         short_change = ((avg_short / current_price) - 1) * 100
         mid_change = ((avg_mid / current_price) - 1) * 100
         
-        # Threshold thấp hơn cho scalping (0.5% vs 2%)
         if short_change > 0.5 and mid_change > 0.8:
             signal = "LONG"
             confidence = min(90, 50 + abs(short_change) * 10)
@@ -328,19 +319,18 @@ def calculate_trading_signal(predictor, timeframe):
             bull_prob = 50
             bear_prob = 50
         
-        # SCALPING: Entry/SL/TP chặt chẽ hơn
         if signal == "LONG":
-            entry = current_price * 0.999   # Entry sát giá hơn
-            stop_loss = entry * 0.995       # SL -0.5%
-            tp1 = entry * 1.005             # TP1 +0.5%
-            tp2 = entry * 1.010             # TP2 +1.0%
-            tp3 = entry * 1.015             # TP3 +1.5%
+            entry = current_price * 0.999
+            stop_loss = entry * 0.995
+            tp1 = entry * 1.005
+            tp2 = entry * 1.010
+            tp3 = entry * 1.015
         elif signal == "SHORT":
             entry = current_price * 1.001
-            stop_loss = entry * 1.005       # SL +0.5%
-            tp1 = entry * 0.995             # TP1 -0.5%
-            tp2 = entry * 0.990             # TP2 -1.0%
-            tp3 = entry * 0.985             # TP3 -1.5%
+            stop_loss = entry * 1.005
+            tp1 = entry * 0.995
+            tp2 = entry * 0.990
+            tp3 = entry * 0.985
         else:
             entry = current_price
             stop_loss = current_price * 0.995
@@ -349,7 +339,6 @@ def calculate_trading_signal(predictor, timeframe):
             tp3 = current_price * 1.015
     
     else:
-        # SWING TRADING: Logic cũ cho 4h, 1d, 1w
         short_term = predictions[:3]
         mid_term = predictions[3:5] if len(predictions) > 3 else predictions[:3]
         
@@ -436,14 +425,12 @@ def ticker_carousel():
     
     nav_col1, *ticker_cols, nav_col2 = st.columns([1, 2, 2, 2, 2, 1])
     
-    # Previous button
     with nav_col1:
         if st.button("◀", key="prev_btn", help="Previous symbols"):
             if st.session_state.ticker_start_index > 0:
                 st.session_state.ticker_start_index -= visible_count
                 st.rerun()
     
-    # Display tickers
     for idx, col in enumerate(ticker_cols):
         symbol_idx = start_idx + idx
         if symbol_idx < len(SYMBOLS):
@@ -456,7 +443,6 @@ def ticker_carousel():
                     change_pct = ticker_data['change_percent']
                     is_up = change_pct >= 0
                     
-                    # Ticker info display
                     st.markdown(f"""
                     <div style="background-color: #2d2d2d; padding: 15px; border-radius: 8px; border: 1px solid #3d3d3d; text-align: center;">
                         <div style="color: #ffffff; font-weight: bold; font-size: 16px; margin-bottom: 8px;">{symbol}</div>
@@ -465,13 +451,11 @@ def ticker_carousel():
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # Chart button
                     if st.button("📊 Chart", key=f"chart_{symbol}", use_container_width=True, type="secondary"):
                         st.session_state.show_chart = True
                         st.session_state.chart_symbol = symbol
                         st.rerun()
     
-    # Next button
     with nav_col2:
         if st.button("▶", key="next_btn", help="Next symbols"):
             if st.session_state.ticker_start_index + visible_count < len(SYMBOLS):
@@ -481,7 +465,7 @@ def ticker_carousel():
 ticker_carousel()
 
 # ============================================
-# CHART CONTAINER
+# CHART CONTAINER - SỬ DỤNG COMPONENT
 # ============================================
 if st.session_state.show_chart:
     st.markdown("---")
@@ -508,169 +492,19 @@ if st.session_state.show_chart:
             st.session_state.show_chart = False
             st.rerun()
     
-    # Cache key for chart data
+    # Get chart data
     cache_key = f"{st.session_state.chart_symbol}_{st.session_state.chart_interval}"
     
-    # Get data from cache or fetch new
     if cache_key not in st.session_state.chart_data_cache:
         df = get_klines(st.session_state.chart_symbol, st.session_state.chart_interval, 200)
         st.session_state.chart_data_cache[cache_key] = df
     else:
         df = st.session_state.chart_data_cache[cache_key]
     
-    if df is not None and len(df) > 0:
-        fig = make_subplots(
-            rows=2, cols=1,
-            shared_xaxes=True,
-            vertical_spacing=0.03,
-            row_heights=[0.7, 0.3],
-            subplot_titles=(f'{st.session_state.chart_symbol} - {st.session_state.chart_interval.upper()}', 'Volume')
-        )
-        
-        fig.add_trace(
-            go.Candlestick(
-                x=df['timestamp'],
-                open=df['open'],
-                high=df['high'],
-                low=df['low'],
-                close=df['close'],
-                name='Price',
-                increasing_line_color='#26a69a',
-                decreasing_line_color='#ef5350',
-                hovertemplate='<b>%{x|%Y-%m-%d %H:%M}</b><br>' +
-                             'Open: $%{open:.2f}<br>' +
-                             'High: $%{high:.2f}<br>' +
-                             'Low: $%{low:.2f}<br>' +
-                             'Close: $%{close:.2f}<br>' +
-                             '<extra></extra>'
-            ),
-            row=1, col=1
-        )
-        
-        colors = ['#26a69a' if row['close'] >= row['open'] else '#ef5350' 
-                 for _, row in df.iterrows()]
-        
-        fig.add_trace(
-            go.Bar(
-                x=df['timestamp'],
-                y=df['volume'],
-                name='Volume',
-                marker_color=colors,
-                opacity=0.6,
-                hovertemplate='<b>Volume</b><br>' +
-                             '%{y:,.0f}<br>' +
-                             '<extra></extra>'
-            ),
-            row=2, col=1
-        )
-        
-        # ============================================
-        # SPIKE LINES (CROSSHAIR LINES) - SIMPLE SOLUTION
-        # ============================================
-        
-        # Current price line with label (fixed on right side)
-        current_price = df['close'].iloc[-1]
-        is_price_up = df['close'].iloc[-1] >= df['close'].iloc[-2] if len(df) > 1 else True
-        price_color = "#26a69a" if is_price_up else "#ef5350"
-        
-        fig.add_hline(
-            y=current_price,
-            line_dash="solid",
-            line_color=price_color,
-            line_width=2,
-            annotation_text=f"${current_price:,.2f}",
-            annotation_position="right",
-            annotation=dict(
-                font=dict(size=13, color="#ffffff", family="monospace"),
-                bgcolor=price_color,
-                bordercolor=price_color,
-                borderwidth=2,
-                borderpad=6,
-                opacity=0.9
-            ),
-            row=1, col=1
-        )
-        
-        fig.update_layout(
-            height=700,
-            template='plotly_dark',
-            xaxis_rangeslider_visible=False,
-            showlegend=False,
-            hovermode='x unified',
-            dragmode='pan',
-            modebar_add=['zoom2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d'],
-            
-            # Hover label styling
-            hoverlabel=dict(
-                bgcolor="#2d2d2d",
-                font_size=14,
-                font_family="monospace",
-                font_color="#ffffff",
-                bordercolor="#667eea"
-            )
-        )
-        
-        # X-axis spike (vertical crosshair line)
-        fig.update_xaxes(
-            fixedrange=False,
-            showspikes=True,              # Enable vertical spike
-            spikemode='across',           # Span across entire chart
-            spikesnap='cursor',           # Follow cursor position
-            spikecolor='rgba(255,255,255,0.5)',  # White semi-transparent
-            spikethickness=1,             # Line thickness
-            spikedash='dot'               # Dotted line style
-        )
-        
-        # Y-axis spike (horizontal crosshair line) - PRICE CHART (Row 1)
-        fig.update_yaxes(
-            row=1, col=1,
-            fixedrange=False,
-            showspikes=True,              # Enable horizontal spike
-            spikemode='across+toaxis',    # Span across + extend to Y-axis
-            spikesnap='cursor',           # Follow cursor position
-            spikecolor='rgba(255,255,255,0.5)',  # White semi-transparent
-            spikethickness=1,             # Line thickness
-            spikedash='dot'               # Dotted line style
-        )
-        
-        # Y-axis spike (horizontal crosshair line) - VOLUME CHART (Row 2)
-        fig.update_yaxes(
-            row=2, col=1,
-            fixedrange=False,
-            showspikes=True,              # Enable horizontal spike
-            spikemode='across',           # Span across entire chart
-            spikesnap='cursor',           # Follow cursor position
-            spikecolor='rgba(255,255,255,0.5)',  # White semi-transparent
-            spikethickness=1,             # Line thickness
-            spikedash='dot'               # Dotted line style
-        )
-        
-        # Axis labels
-        fig.update_xaxes(title_text="Time", row=2, col=1)
-        fig.update_yaxes(title_text="Price ($)", row=1, col=1)
-        fig.update_yaxes(title_text="Volume", row=2, col=1)
-        
-        st.plotly_chart(fig, use_container_width=True, config={
-            'scrollZoom': True,
-            'displayModeBar': True,
-            'displaylogo': False,
-            'modeBarButtonsToRemove': ['select2d', 'lasso2d']
-        })
-        
-        current = df.iloc[-1]
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric("Open", f"${current['open']:.2f}")
-        with col2:
-            st.metric("High", f"${current['high']:.2f}")
-        with col3:
-            st.metric("Low", f"${current['low']:.2f}")
-        with col4:
-            st.metric("Close", f"${current['close']:.2f}")
+    # Render TradingView-style chart
+    render_tradingview_chart(df, st.session_state.chart_symbol, st.session_state.chart_interval)
     
     st.markdown("---")
-    # STOP EXECUTION HERE - Không render phần dưới khi chart đang mở
     st.stop()
 
 # ============================================
