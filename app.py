@@ -217,8 +217,6 @@ if 'last_refresh' not in st.session_state:
     st.session_state.last_refresh = time.time()
 if 'chart_data_cache' not in st.session_state:
     st.session_state.chart_data_cache = {}
-if 'results_rendered' not in st.session_state:
-    st.session_state.results_rendered = False
 
 # Initialize WebSocket
 if 'ws_handler' not in st.session_state:
@@ -362,6 +360,117 @@ def calculate_trading_signal(predictor, timeframe):
         'mid_term_change': mid_change
     }
 
+def render_chart():
+    """Function to render chart - tách riêng để tránh conflict"""
+    st.markdown("---")
+    st.markdown("## 📈 Candlestick Chart")
+    
+    col1, col2, col3 = st.columns([2, 2, 1])
+    
+    with col1:
+        st.markdown(f"### {st.session_state.chart_symbol}")
+    
+    with col2:
+        interval = st.selectbox(
+            "Timeframe",
+            ['15m', '1h', '4h', '1d'],
+            index=['15m', '1h', '4h', '1d'].index(st.session_state.chart_interval),
+            key="chart_interval_select"
+        )
+        if interval != st.session_state.chart_interval:
+            st.session_state.chart_interval = interval
+            st.rerun()
+    
+    with col3:
+        if st.button("❌ Close", type="primary", key="close_chart_btn"):
+            st.session_state.show_chart = False
+            st.rerun()
+    
+    # Cache key for chart data
+    cache_key = f"{st.session_state.chart_symbol}_{st.session_state.chart_interval}"
+    
+    # Get data from cache or fetch new
+    if cache_key not in st.session_state.chart_data_cache:
+        df = get_klines(st.session_state.chart_symbol, st.session_state.chart_interval, 200)
+        st.session_state.chart_data_cache[cache_key] = df
+    else:
+        df = st.session_state.chart_data_cache[cache_key]
+    
+    if df is not None and len(df) > 0:
+        fig = make_subplots(
+            rows=2, cols=1,
+            shared_xaxes=True,
+            vertical_spacing=0.03,
+            row_heights=[0.7, 0.3],
+            subplot_titles=(f'{st.session_state.chart_symbol} - {st.session_state.chart_interval.upper()}', 'Volume')
+        )
+        
+        fig.add_trace(
+            go.Candlestick(
+                x=df['timestamp'],
+                open=df['open'],
+                high=df['high'],
+                low=df['low'],
+                close=df['close'],
+                name='Price',
+                increasing_line_color='#26a69a',
+                decreasing_line_color='#ef5350'
+            ),
+            row=1, col=1
+        )
+        
+        colors = ['#26a69a' if row['close'] >= row['open'] else '#ef5350' 
+                 for _, row in df.iterrows()]
+        
+        fig.add_trace(
+            go.Bar(
+                x=df['timestamp'],
+                y=df['volume'],
+                name='Volume',
+                marker_color=colors,
+                opacity=0.6
+            ),
+            row=2, col=1
+        )
+        
+        fig.update_layout(
+            height=700,
+            template='plotly_dark',
+            xaxis_rangeslider_visible=False,
+            showlegend=False,
+            hovermode='x unified',
+            dragmode='pan',
+            modebar_add=['zoom2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d']
+        )
+        
+        fig.update_xaxes(fixedrange=False)
+        fig.update_yaxes(fixedrange=False)
+        
+        fig.update_xaxes(title_text="Time", row=2, col=1)
+        fig.update_yaxes(title_text="Price ($)", row=1, col=1)
+        fig.update_yaxes(title_text="Volume", row=2, col=1)
+        
+        st.plotly_chart(fig, use_container_width=True, config={
+            'scrollZoom': True,
+            'displayModeBar': True,
+            'displaylogo': False,
+            'modeBarButtonsToRemove': ['select2d', 'lasso2d']
+        })
+        
+        current = df.iloc[-1]
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Open", f"${current['open']:.2f}")
+        with col2:
+            st.metric("High", f"${current['high']:.2f}")
+        with col3:
+            st.metric("Low", f"${current['low']:.2f}")
+        with col4:
+            st.metric("Close", f"${current['close']:.2f}")
+    
+    st.markdown("---")
+
 # ============================================
 # BEAUTIFUL HEADER
 # ============================================
@@ -429,117 +538,10 @@ def ticker_carousel():
 ticker_carousel()
 
 # ============================================
-# CHART CONTAINER
+# CHART CONTAINER - RENDER RIÊNG NGOÀI FRAGMENT
 # ============================================
 if st.session_state.show_chart:
-    st.markdown("---")
-    st.markdown("## 📈 Candlestick Chart")
-    
-    col1, col2, col3 = st.columns([2, 2, 1])
-    
-    with col1:
-        st.markdown(f"### {st.session_state.chart_symbol}")
-    
-    with col2:
-        interval = st.selectbox(
-            "Timeframe",
-            ['15m', '1h', '4h', '1d'],
-            index=['15m', '1h', '4h', '1d'].index(st.session_state.chart_interval),
-            key="chart_interval_select"
-        )
-        if interval != st.session_state.chart_interval:
-            st.session_state.chart_interval = interval
-            st.rerun()
-    
-    with col3:
-        if st.button("❌ Close", type="primary", key="close_chart_btn"):
-            st.session_state.show_chart = False
-            # Không gọi st.rerun() - để Streamlit tự refresh
-    
-    # Chỉ render chart nếu show_chart = True
-    if st.session_state.show_chart:
-        cache_key = f"{st.session_state.chart_symbol}_{st.session_state.chart_interval}"
-        
-        if cache_key not in st.session_state.chart_data_cache:
-            df = get_klines(st.session_state.chart_symbol, st.session_state.chart_interval, 200)
-            st.session_state.chart_data_cache[cache_key] = df
-        else:
-            df = st.session_state.chart_data_cache[cache_key]
-        
-        if df is not None and len(df) > 0:
-            fig = make_subplots(
-                rows=2, cols=1,
-                shared_xaxes=True,
-                vertical_spacing=0.03,
-                row_heights=[0.7, 0.3],
-                subplot_titles=(f'{st.session_state.chart_symbol} - {st.session_state.chart_interval.upper()}', 'Volume')
-            )
-            
-            fig.add_trace(
-                go.Candlestick(
-                    x=df['timestamp'],
-                    open=df['open'],
-                    high=df['high'],
-                    low=df['low'],
-                    close=df['close'],
-                    name='Price',
-                    increasing_line_color='#26a69a',
-                    decreasing_line_color='#ef5350'
-                ),
-                row=1, col=1
-            )
-            
-            colors = ['#26a69a' if row['close'] >= row['open'] else '#ef5350' 
-                     for _, row in df.iterrows()]
-            
-            fig.add_trace(
-                go.Bar(
-                    x=df['timestamp'],
-                    y=df['volume'],
-                    name='Volume',
-                    marker_color=colors,
-                    opacity=0.6
-                ),
-                row=2, col=1
-            )
-            
-            fig.update_layout(
-                height=700,
-                template='plotly_dark',
-                xaxis_rangeslider_visible=False,
-                showlegend=False,
-                hovermode='x unified',
-                dragmode='pan',
-                modebar_add=['zoom2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d']
-            )
-            
-            fig.update_xaxes(fixedrange=False)
-            fig.update_yaxes(fixedrange=False)
-            
-            fig.update_xaxes(title_text="Time", row=2, col=1)
-            fig.update_yaxes(title_text="Price ($)", row=1, col=1)
-            fig.update_yaxes(title_text="Volume", row=2, col=1)
-            
-            st.plotly_chart(fig, use_container_width=True, config={
-                'scrollZoom': True,
-                'displayModeBar': True,
-                'displaylogo': False,
-                'modeBarButtonsToRemove': ['select2d', 'lasso2d']
-            })
-            
-            current = df.iloc[-1]
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.metric("Open", f"${current['open']:.2f}")
-            with col2:
-                st.metric("High", f"${current['high']:.2f}")
-            with col3:
-                st.metric("Low", f"${current['low']:.2f}")
-            with col4:
-                st.metric("Close", f"${current['close']:.2f}")
-        
-        st.markdown("---")
+    render_chart()
 
 # ============================================
 # CONTROL PANEL
@@ -630,7 +632,6 @@ if st.session_state.trigger_analysis:
             
             st.session_state.predictor = predictor
             st.session_state.predictions = all_predictions
-            st.session_state.results_rendered = False  # Reset flag
             
             time.sleep(1)
             progress_bar.empty()
@@ -643,15 +644,9 @@ if st.session_state.trigger_analysis:
             st.error(f"❌ Error: {str(e)}")
 
 # ============================================
-# RESULTS DISPLAY - CHỈ RENDER MỘT LẦN
+# RESULTS DISPLAY
 # ============================================
-if (st.session_state.predictor is not None and 
-    st.session_state.predictions is not None and 
-    not st.session_state.results_rendered):
-    
-    # Đánh dấu đã render
-    st.session_state.results_rendered = True
-    
+if st.session_state.predictor is not None and st.session_state.predictions is not None:
     predictor = st.session_state.predictor
     all_predictions = st.session_state.predictions
     
