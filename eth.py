@@ -104,7 +104,13 @@ class AdvancedETHPredictor:
         """Fetch all timeframes and store reference price"""
         self.log(f"\n🔄 Fetching all data for {symbol}...")
         
-        timeframes = {'4h': 300, '1d': 500, '1w': 150}
+        # THÊM 15m cho scalping
+        timeframes = {
+            '15m': 500,
+            '4h': 300, 
+            '1d': 500, 
+            '1w': 150
+        }
         all_data = {}
         
         for timeframe, limit in timeframes.items():
@@ -112,7 +118,19 @@ class AdvancedETHPredictor:
             if df is not None:
                 all_data[timeframe] = df
         
-        if '4h' in all_data:
+        # Ưu tiên lấy reference price từ 15m (mới nhất)
+        if '15m' in all_data:
+            self.reference_price = all_data['15m']['close'].iloc[-1]
+            self.reference_time = all_data['15m']['datetime'].iloc[-1]
+            
+            utc_time = self.reference_time.tz_localize('UTC')
+            local_tz = pytz.timezone(self.timezone)
+            self.reference_time_local = utc_time.astimezone(local_tz)
+            
+            self.log(f"\n💰 Reference Price: ${self.reference_price:.2f}")
+            self.log(f"⏰ Reference Time (UTC): {self.reference_time}")
+            self.log(f"🌏 Reference Time ({self.timezone}): {self.reference_time_local}")
+        elif '4h' in all_data:
             self.reference_price = all_data['4h']['close'].iloc[-1]
             self.reference_time = all_data['4h']['datetime'].iloc[-1]
             
@@ -464,9 +482,18 @@ class AdvancedETHPredictor:
                 # Predict
                 pred_price = model.predict(features)[0]
                 
-                # Apply realistic constraints
+                # Apply realistic constraints - KHÁC NHAU CHO TỪNG TIMEFRAME
                 current_price = current_data['close'].iloc[-1]
-                max_change = 0.20  # 20% max change
+                
+                # 15m: Biến động nhỏ hơn (5% max)
+                if timeframe == '15m':
+                    max_change = 0.05
+                # 4h: Biến động trung bình (10% max)
+                elif timeframe == '4h':
+                    max_change = 0.10
+                # 1d, 1w: Biến động lớn hơn (20% max)
+                else:
+                    max_change = 0.20
                 
                 if abs(pred_price / current_price - 1) > max_change:
                     if pred_price > current_price:
@@ -474,8 +501,12 @@ class AdvancedETHPredictor:
                     else:
                         pred_price = current_price * (1 - max_change)
                 
-                # Add minimal noise for variance
-                noise_factor = np.random.normal(0, 0.001)
+                # Add minimal noise for variance - KHÁC NHAU CHO TỪNG TIMEFRAME
+                if timeframe == '15m':
+                    noise_factor = np.random.normal(0, 0.0005)
+                else:
+                    noise_factor = np.random.normal(0, 0.001)
+                    
                 pred_price = pred_price * (1 + noise_factor)
                 
                 predictions.append(pred_price)
@@ -492,9 +523,11 @@ class AdvancedETHPredictor:
                 avg_volume = current_data['volume'].tail(20).mean()
                 new_volume = avg_volume * np.random.uniform(0.8, 1.2)
                 
-                # Calculate next datetime
+                # Calculate next datetime - THÊM CASE CHO 15M
                 last_datetime = current_data['datetime'].iloc[-1]
-                if timeframe == '4h':
+                if timeframe == '15m':
+                    next_datetime = last_datetime + pd.Timedelta(minutes=15)
+                elif timeframe == '4h':
                     next_datetime = last_datetime + pd.Timedelta(hours=4)
                 elif timeframe == '1d':
                     next_datetime = last_datetime + pd.Timedelta(days=1)
@@ -530,7 +563,8 @@ class AdvancedETHPredictor:
         """Get predictions from all models for all timeframes"""
         all_predictions = {}
         
-        for timeframe in ['4h', '1d', '1w']:
+        # THÊM 15m vào loop
+        for timeframe in ['15m', '4h', '1d', '1w']:
             if timeframe not in self.all_model_results or timeframe not in all_data:
                 continue
             
