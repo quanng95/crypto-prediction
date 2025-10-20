@@ -360,8 +360,77 @@ def calculate_trading_signal(predictor, timeframe):
         'mid_term_change': mid_change
     }
 
-def render_chart():
-    """Function to render chart - tách riêng để tránh conflict"""
+# ============================================
+# BEAUTIFUL HEADER
+# ============================================
+st.markdown("""
+<div class="header-container">
+    <h1 class="header-title">🔮 Crypto Prediction</h1>
+</div>
+""", unsafe_allow_html=True)
+
+# ============================================
+# TICKER CAROUSEL (Fragment with auto-refresh)
+# ============================================
+@st.fragment(run_every="0.5s")
+def ticker_carousel():
+    """Ticker carousel with auto-refresh"""
+    st.markdown("---")
+    
+    visible_count = 4
+    start_idx = st.session_state.ticker_start_index
+    
+    nav_col1, *ticker_cols, nav_col2 = st.columns([1, 2, 2, 2, 2, 1])
+    
+    # Previous button
+    with nav_col1:
+        if st.button("◀", key="prev_btn", help="Previous symbols"):
+            if st.session_state.ticker_start_index > 0:
+                st.session_state.ticker_start_index -= visible_count
+                st.rerun()
+    
+    # Display tickers
+    for idx, col in enumerate(ticker_cols):
+        symbol_idx = start_idx + idx
+        if symbol_idx < len(SYMBOLS):
+            symbol = SYMBOLS[symbol_idx]
+            
+            with col:
+                ticker_data = get_ticker_realtime(symbol)
+                
+                if ticker_data:
+                    change_pct = ticker_data['change_percent']
+                    is_up = change_pct >= 0
+                    
+                    # Ticker info display
+                    st.markdown(f"""
+                    <div style="background-color: #2d2d2d; padding: 15px; border-radius: 8px; border: 1px solid #3d3d3d; text-align: center;">
+                        <div style="color: #ffffff; font-weight: bold; font-size: 16px; margin-bottom: 8px;">{symbol}</div>
+                        <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-weight: bold; font-size: 24px; margin-bottom: 5px;">${ticker_data['price']:,.2f}</div>
+                        <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">{'▲' if is_up else '▼'} {abs(change_pct):.2f}%</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Chart button
+                    if st.button("📊 Chart", key=f"chart_{symbol}", use_container_width=True, type="secondary"):
+                        st.session_state.show_chart = True
+                        st.session_state.chart_symbol = symbol
+                        st.rerun()
+    
+    # Next button
+    with nav_col2:
+        if st.button("▶", key="next_btn", help="Next symbols"):
+            if st.session_state.ticker_start_index + visible_count < len(SYMBOLS):
+                st.session_state.ticker_start_index += visible_count
+                st.rerun()
+
+# Render ticker carousel
+ticker_carousel()
+
+# ============================================
+# CHART CONTAINER
+# ============================================
+if st.session_state.show_chart:
     st.markdown("---")
     st.markdown("## 📈 Candlestick Chart")
     
@@ -470,81 +539,11 @@ def render_chart():
             st.metric("Close", f"${current['close']:.2f}")
     
     st.markdown("---")
+    # STOP EXECUTION HERE - Không render phần dưới khi chart đang mở
+    st.stop()
 
 # ============================================
-# BEAUTIFUL HEADER
-# ============================================
-st.markdown("""
-<div class="header-container">
-    <h1 class="header-title">🔮 Crypto Prediction</h1>
-</div>
-""", unsafe_allow_html=True)
-
-# ============================================
-# TICKER CAROUSEL (Fragment with auto-refresh)
-# ============================================
-@st.fragment(run_every="0.5s")
-def ticker_carousel():
-    """Ticker carousel with auto-refresh"""
-    st.markdown("---")
-    
-    visible_count = 4
-    start_idx = st.session_state.ticker_start_index
-    
-    nav_col1, *ticker_cols, nav_col2 = st.columns([1, 2, 2, 2, 2, 1])
-    
-    # Previous button
-    with nav_col1:
-        if st.button("◀", key="prev_btn", help="Previous symbols"):
-            if st.session_state.ticker_start_index > 0:
-                st.session_state.ticker_start_index -= visible_count
-                st.rerun()
-    
-    # Display tickers
-    for idx, col in enumerate(ticker_cols):
-        symbol_idx = start_idx + idx
-        if symbol_idx < len(SYMBOLS):
-            symbol = SYMBOLS[symbol_idx]
-            
-            with col:
-                ticker_data = get_ticker_realtime(symbol)
-                
-                if ticker_data:
-                    change_pct = ticker_data['change_percent']
-                    is_up = change_pct >= 0
-                    
-                    # Ticker info display
-                    st.markdown(f"""
-                    <div style="background-color: #2d2d2d; padding: 15px; border-radius: 8px; border: 1px solid #3d3d3d; text-align: center;">
-                        <div style="color: #ffffff; font-weight: bold; font-size: 16px; margin-bottom: 8px;">{symbol}</div>
-                        <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-weight: bold; font-size: 24px; margin-bottom: 5px;">${ticker_data['price']:,.2f}</div>
-                        <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">{'▲' if is_up else '▼'} {abs(change_pct):.2f}%</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Chart button
-                    if st.button("📊 Chart", key=f"chart_{symbol}", use_container_width=True, type="secondary"):
-                        st.session_state.show_chart = True
-                        st.session_state.chart_symbol = symbol
-                        st.rerun()
-    
-    # Next button
-    with nav_col2:
-        if st.button("▶", key="next_btn", help="Next symbols"):
-            if st.session_state.ticker_start_index + visible_count < len(SYMBOLS):
-                st.session_state.ticker_start_index += visible_count
-                st.rerun()
-
-ticker_carousel()
-
-# ============================================
-# CHART CONTAINER - RENDER RIÊNG NGOÀI FRAGMENT
-# ============================================
-if st.session_state.show_chart:
-    render_chart()
-
-# ============================================
-# CONTROL PANEL
+# CONTROL PANEL - CHỈ RENDER KHI KHÔNG MỞ CHART
 # ============================================
 st.markdown("---")
 st.markdown("### 🎛️ Control Panel")
