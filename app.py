@@ -18,6 +18,7 @@ from methodology import render_methodology_tab
 
 # Import chart component
 from chart_component import render_tradingview_chart
+from sidebar import render_sidebar
 
 # Page config
 st.set_page_config(
@@ -411,10 +412,16 @@ st.markdown("""
     <h1 class="header-title">🔮 Crypto Prediction</h1>
 </div>
 """, unsafe_allow_html=True)
+# ============================================
+# SIDEBAR - THÊM NGAY SAU HEADER
+# ============================================
+render_sidebar()
 
 def format_price(price):
     """Format price based on its value"""
     if price >= 1000:
+        return f"${price:,.2f}"
+    elif price >= 100:
         return f"${price:,.2f}"
     elif price >= 1:
         return f"${price:,.4f}"
@@ -424,7 +431,7 @@ def format_price(price):
         return f"${price:,.8f}"
     else:
         # Cho các coin như PEPE (giá rất nhỏ)
-        return f"${price:.10f}".rstrip('0').rstrip('.')
+        return f"${price:.11f}".rstrip('0').rstrip('.')
     
 # ============================================
 # TICKER CAROUSEL (Fragment with auto-refresh)
