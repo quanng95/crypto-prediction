@@ -1,337 +1,269 @@
 import streamlit as st
 import time
 
-def format_price(price):
+def format_price_sidebar(price):
     """Format price based on its value"""
     if price >= 1000:
-        return f"{price:,.2f}"
+        return f"${price:,.2f}"
     elif price >= 100:
-        return f"{price:,.2f}"
+        return f"${price:,.2f}"
     elif price >= 1:
-        return f"{price:,.4f}"
+        return f"${price:,.4f}"
     elif price >= 0.01:
-        return f"{price:,.6f}"
+        return f"${price:,.6f}"
     elif price >= 0.0001:
-        return f"{price:,.8f}"
+        return f"${price:,.8f}"
     else:
-        return f"{price:.10f}".rstrip('0').rstrip('.')
+        return f"${price:.11f}".rstrip('0').rstrip('.')
 
-def format_change(change):
-    """Format change percentage"""
-    return f"{change:+.2f}%"
+def get_ticker_data(ws_handler, symbol):
+    """Get ticker data from WebSocket"""
+    try:
+        data = ws_handler.get_price(symbol)
+        if data and (time.time() - data['timestamp']) < 5:
+            return data
+        return None
+    except:
+        return None
 
-def render_sidebar():
-    """Render expandable sidebar with real-time ticker"""
+@st.fragment(run_every="0.5s")
+def render_sidebar_content(ws_handler, symbols, selected_symbol):
+    """Render sidebar content with realtime updates"""
     
-    # Initialize sidebar state
-    if 'sidebar_expanded' not in st.session_state:
-        st.session_state.sidebar_expanded = False
+    st.markdown("""
+    <div style="text-align: center; margin-bottom: 20px;">
+        <h2 style="color: #ffffff; margin: 0;">📊 Markets</h2>
+        <p style="color: #7f8c8d; font-size: 14px; margin: 5px 0;">Live Prices</p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # Sidebar CSS
+    for symbol in symbols:
+        ticker_data = get_ticker_data(ws_handler, symbol)
+        
+        if ticker_data:
+            price = ticker_data['price']
+            change_pct = ticker_data['change_percent']
+            is_up = change_pct >= 0
+            
+            formatted_price = format_price_sidebar(price)
+            
+            # Highlight selected symbol
+            is_selected = (symbol == selected_symbol)
+            border_color = "#667eea" if is_selected else "#3d3d3d"
+            bg_color = "#3d3d3d" if is_selected else "#2d2d2d"
+            
+            st.markdown(f"""
+            <div style="
+                background-color: {bg_color};
+                padding: 12px;
+                border-radius: 8px;
+                margin-bottom: 10px;
+                border: 2px solid {border_color};
+                cursor: pointer;
+                transition: all 0.3s ease;
+            ">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div style="color: #ffffff; font-weight: bold; font-size: 14px;">{symbol.replace('USDT', '')}</div>
+                        <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 12px; margin-top: 2px;">
+                            {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-weight: bold; font-size: 16px;">
+                            {formatted_price}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Button to select symbol
+            if st.button(
+                f"📈 Analyze {symbol.replace('USDT', '')}",
+                key=f"sidebar_analyze_{symbol}",
+                use_container_width=True,
+                type="secondary" if not is_selected else "primary"
+            ):
+                st.session_state.selected_symbol = symbol
+                st.session_state.trigger_analysis = True
+                st.rerun()
+        else:
+            # Fallback UI when no data
+            st.markdown(f"""
+            <div style="
+                background-color: #2d2d2d;
+                padding: 12px;
+                border-radius: 8px;
+                margin-bottom: 10px;
+                border: 1px solid #3d3d3d;
+            ">
+                <div style="color: #7f8c8d; font-size: 14px; text-align: center;">
+                    {symbol} - Loading...
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+def render_custom_sidebar(ws_handler, symbols, selected_symbol):
+    """Main sidebar render function"""
+    
+    # Custom CSS for sidebar
     st.markdown("""
     <style>
-        /* Sidebar Container */
-        .sidebar-container {
+        /* Hide default Streamlit sidebar */
+        [data-testid="stSidebar"] {
+            display: none;
+        }
+        
+        /* Custom sidebar container */
+        .custom-sidebar {
             position: fixed;
-            left: 0;
+            left: -300px;
             top: 0;
+            width: 300px;
             height: 100vh;
-            width: 280px;
-            background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
-            transform: translateX(-280px);
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            z-index: 9999;
-            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5);
+            background: linear-gradient(180deg, #1e1e1e 0%, #2d2d2d 100%);
+            box-shadow: 2px 0 15px rgba(0, 0, 0, 0.5);
+            transition: left 0.3s ease;
+            z-index: 999;
             overflow-y: auto;
-            overflow-x: hidden;
+            padding: 20px;
         }
         
-        .sidebar-container.expanded {
-            transform: translateX(0);
+        .custom-sidebar.open {
+            left: 0;
         }
         
-        /* Scrollbar Styling */
-        .sidebar-container::-webkit-scrollbar {
-            width: 6px;
-        }
-        
-        .sidebar-container::-webkit-scrollbar-track {
-            background: #1a1a2e;
-        }
-        
-        .sidebar-container::-webkit-scrollbar-thumb {
-            background: #667eea;
-            border-radius: 3px;
-        }
-        
-        .sidebar-container::-webkit-scrollbar-thumb:hover {
-            background: #764ba2;
-        }
-        
-        /* Toggle Button at Edge */
-        .sidebar-toggle-edge {
+        /* Toggle button */
+        .sidebar-toggle {
             position: fixed;
             left: 0;
             top: 50%;
             transform: translateY(-50%);
-            width: 30px;
-            height: 60px;
+            width: 40px;
+            height: 80px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 0 8px 8px 0;
+            border-radius: 0 10px 10px 0;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            z-index: 9998;
+            z-index: 1000;
             transition: all 0.3s ease;
             box-shadow: 2px 0 10px rgba(102, 126, 234, 0.4);
         }
         
-        .sidebar-toggle-edge:hover {
-            width: 35px;
+        .sidebar-toggle:hover {
+            width: 45px;
             box-shadow: 2px 0 15px rgba(102, 126, 234, 0.6);
         }
         
-        .sidebar-toggle-edge.hidden {
-            transform: translateX(-50px);
-            opacity: 0;
+        .sidebar-toggle.open {
+            left: 300px;
         }
         
-        .sidebar-toggle-edge span {
+        .toggle-icon {
             color: white;
-            font-size: 18px;
+            font-size: 24px;
             font-weight: bold;
         }
         
-        /* Toggle Button Inside Sidebar */
-        .sidebar-toggle-inside {
-            position: absolute;
-            right: 10px;
-            top: 10px;
-            width: 35px;
-            height: 35px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-        
-        .sidebar-toggle-inside:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: scale(1.1);
-        }
-        
-        .sidebar-toggle-inside span {
-            color: white;
-            font-size: 18px;
-            font-weight: bold;
-        }
-        
-        /* Sidebar Header */
-        .sidebar-header {
-            padding: 20px 15px 15px 15px;
-            border-bottom: 2px solid rgba(102, 126, 234, 0.3);
-            margin-bottom: 10px;
-        }
-        
-        .sidebar-title {
-            color: #ffffff;
-            font-size: 20px;
-            font-weight: bold;
-            margin: 0;
-            margin-top: 25px;
-            text-align: center;
-        }
-        
-        /* Ticker Item */
-        .sidebar-ticker {
-            padding: 12px 15px;
-            margin: 5px 10px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-            border-left: 3px solid transparent;
-            transition: all 0.2s ease;
-            cursor: pointer;
-        }
-        
-        .sidebar-ticker:hover {
-            background: rgba(255, 255, 255, 0.1);
-            transform: translateX(5px);
-        }
-        
-        .sidebar-ticker.selected {
-            background: rgba(102, 126, 234, 0.2);
-            border-left-color: #667eea;
-        }
-        
-        .ticker-symbol {
-            color: #ffffff;
-            font-size: 14px;
-            font-weight: bold;
-            margin-bottom: 4px;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-        
-        .ticker-price {
-            font-size: 16px;
-            font-weight: bold;
-            margin-bottom: 2px;
-        }
-        
-        .ticker-price.up {
-            color: #27ae60;
-        }
-        
-        .ticker-price.down {
-            color: #e74c3c;
-        }
-        
-        .ticker-change {
-            font-size: 12px;
-        }
-        
-        .ticker-change.up {
-            color: #27ae60;
-        }
-        
-        .ticker-change.down {
-            color: #e74c3c;
-        }
-        
-        /* Backdrop */
-        .sidebar-backdrop {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(0, 0, 0, 0.5);
-            backdrop-filter: blur(2px);
-            z-index: 9997;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.3s ease;
-        }
-        
-        .sidebar-backdrop.visible {
-            opacity: 1;
-            pointer-events: auto;
-        }
-        
-        /* Status Indicator */
-        .status-indicator {
-            display: inline-block;
+        /* Scrollbar styling */
+        .custom-sidebar::-webkit-scrollbar {
             width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #27ae60;
-            animation: pulse 2s infinite;
         }
         
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+        .custom-sidebar::-webkit-scrollbar-track {
+            background: #1e1e1e;
+        }
+        
+        .custom-sidebar::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 4px;
+        }
+        
+        .custom-sidebar::-webkit-scrollbar-thumb:hover {
+            background: #764ba2;
+        }
+        
+        /* Adjust main content when sidebar is open */
+        .main.sidebar-open {
+            margin-left: 300px;
+            transition: margin-left 0.3s ease;
         }
     </style>
     """, unsafe_allow_html=True)
     
-    # Toggle button at edge (when collapsed)
-    edge_button_class = "hidden" if st.session_state.sidebar_expanded else ""
-    st.markdown(f"""
-    <div class="sidebar-toggle-edge {edge_button_class}" onclick="window.parent.postMessage({{type: 'streamlit:setComponentValue', key: 'toggle_sidebar', value: true}}, '*')">
-        <span>◀</span>
-    </div>
-    """, unsafe_allow_html=True)
+    # Initialize sidebar state
+    if 'sidebar_open' not in st.session_state:
+        st.session_state.sidebar_open = False
     
-    # Backdrop (when expanded)
-    backdrop_class = "visible" if st.session_state.sidebar_expanded else ""
+    # Toggle button HTML
+    toggle_class = "open" if st.session_state.sidebar_open else ""
+    toggle_icon = "›" if st.session_state.sidebar_open else "‹"
+    
     st.markdown(f"""
-    <div class="sidebar-backdrop {backdrop_class}" onclick="window.parent.postMessage({{type: 'streamlit:setComponentValue', key: 'toggle_sidebar', value: true}}, '*')"></div>
+    <div class="sidebar-toggle {toggle_class}" onclick="toggleSidebar()">
+        <span class="toggle-icon">{toggle_icon}</span>
+    </div>
     """, unsafe_allow_html=True)
     
     # Sidebar container
-    sidebar_class = "expanded" if st.session_state.sidebar_expanded else ""
+    sidebar_class = "open" if st.session_state.sidebar_open else ""
     
-    # Create sidebar content
-    sidebar_content = f"""
-    <div class="sidebar-container {sidebar_class}">
-        <div class="sidebar-toggle-inside" onclick="window.parent.postMessage({{type: 'streamlit:setComponentValue', key: 'toggle_sidebar', value: true}}, '*')">
-            <span>▶</span>
-        </div>
-        
-        <div class="sidebar-header">
-            <h2 class="sidebar-title">
-                <span class="status-indicator"></span>
-                Market Watch
-            </h2>
-        </div>
-        
-        <div class="sidebar-tickers">
-    """
-    
-    # Get symbols from session state
-    if 'ws_handler' in st.session_state:
-        symbols = ["ETHUSDT", "BTCUSDT", "PAXGUSDT", "BNBUSDT", "SOLUSDT", 
-                   "DOGEUSDT", "KAITOUSDT", "ADAUSDT"]
-        
-        for symbol in symbols:
-            ticker_data = st.session_state.ws_handler.get_price(symbol)
+    # JavaScript for toggle functionality
+    st.markdown("""
+    <script>
+        function toggleSidebar() {
+            const sidebar = document.querySelector('.custom-sidebar');
+            const toggle = document.querySelector('.sidebar-toggle');
+            const main = document.querySelector('.main');
             
-            if ticker_data:
-                price = ticker_data['price']
-                change_pct = ticker_data['change_percent']
-                is_up = change_pct >= 0
+            if (sidebar && toggle && main) {
+                sidebar.classList.toggle('open');
+                toggle.classList.toggle('open');
+                main.classList.toggle('sidebar-open');
                 
-                formatted_price = format_price(price)
-                formatted_change = format_change(change_pct)
-                
-                price_class = "up" if is_up else "down"
-                arrow = "▲" if is_up else "▼"
-                
-                selected_class = "selected" if st.session_state.get('selected_symbol') == symbol else ""
-                
-                sidebar_content += f"""
-                <div class="sidebar-ticker {selected_class}" onclick="window.parent.postMessage({{type: 'streamlit:setComponentValue', key: 'select_symbol', value: '{symbol}'}}, '*')">
-                    <div class="ticker-symbol">{symbol}</div>
-                    <div class="ticker-price {price_class}">${formatted_price}</div>
-                    <div class="ticker-change {price_class}">{arrow} {formatted_change}</div>
-                </div>
-                """
-            else:
-                sidebar_content += f"""
-                <div class="sidebar-ticker">
-                    <div class="ticker-symbol">{symbol}</div>
-                    <div class="ticker-price">Loading...</div>
-                </div>
-                """
+                // Update icon
+                const icon = toggle.querySelector('.toggle-icon');
+                if (sidebar.classList.contains('open')) {
+                    icon.textContent = '›';
+                } else {
+                    icon.textContent = '‹';
+                }
+            }
+        }
+        
+        // Close sidebar when clicking outside
+        document.addEventListener('click', function(event) {
+            const sidebar = document.querySelector('.custom-sidebar');
+            const toggle = document.querySelector('.sidebar-toggle');
+            
+            if (sidebar && toggle && sidebar.classList.contains('open')) {
+                if (!sidebar.contains(event.target) && !toggle.contains(event.target)) {
+                    toggleSidebar();
+                }
+            }
+        });
+    </script>
+    """, unsafe_allow_html=True)
     
-    sidebar_content += """
-        </div>
-    </div>
-    """
+    # Render sidebar content in a container
+    sidebar_container = st.container()
     
-    st.markdown(sidebar_content, unsafe_allow_html=True)
+    with sidebar_container:
+        st.markdown(f'<div class="custom-sidebar {sidebar_class}" id="customSidebar">', unsafe_allow_html=True)
+        
+        # Render content with auto-refresh
+        render_sidebar_content(ws_handler, symbols, selected_symbol)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
     
-    # Handle toggle button click
-    if st.button("", key="sidebar_toggle_handler", type="primary"):
-        st.session_state.sidebar_expanded = not st.session_state.sidebar_expanded
-        st.rerun()
-    
-    # Auto-refresh fragment for real-time updates
-    @st.fragment(run_every="0.5s")
-    def update_sidebar_prices():
-        """Update sidebar prices in real-time"""
-        if st.session_state.sidebar_expanded and 'ws_handler' in st.session_state:
-            # Trigger re-render by updating a dummy state
-            if 'sidebar_update_count' not in st.session_state:
-                st.session_state.sidebar_update_count = 0
-            st.session_state.sidebar_update_count += 1
-    
-    if st.session_state.sidebar_expanded:
-        update_sidebar_prices()
+    # Button to toggle sidebar (fallback for mobile/touch devices)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col1:
+        if st.button("☰ Markets" if not st.session_state.sidebar_open else "✕ Close", 
+                     key="toggle_sidebar_btn",
+                     type="secondary"):
+            st.session_state.sidebar_open = not st.session_state.sidebar_open
+            st.rerun()
