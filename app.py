@@ -412,6 +412,20 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+def format_price(price):
+    """Format price based on its value"""
+    if price >= 1000:
+        return f"${price:,.2f}"
+    elif price >= 1:
+        return f"${price:,.4f}"
+    elif price >= 0.01:
+        return f"${price:,.6f}"
+    elif price >= 0.0001:
+        return f"${price:,.8f}"
+    else:
+        # Cho các coin như PEPE (giá rất nhỏ)
+        return f"${price:.10f}".rstrip('0').rstrip('.')
+    
 # ============================================
 # TICKER CAROUSEL (Fragment with auto-refresh)
 # ============================================
@@ -428,9 +442,7 @@ def ticker_carousel():
     
     with nav_col1:
         if st.button("◀", key="prev_btn", help="Previous symbols"):
-            # Nếu đang ở đầu list, quay về cuối
             if st.session_state.ticker_start_index == 0:
-                # Tính vị trí cuối cùng sao cho hiển thị đủ 4 symbols
                 st.session_state.ticker_start_index = total_symbols - visible_count
             else:
                 st.session_state.ticker_start_index -= visible_count
@@ -447,11 +459,13 @@ def ticker_carousel():
                 if ticker_data:
                     change_pct = ticker_data['change_percent']
                     is_up = change_pct >= 0
+                    price = ticker_data['price']
+                    formatted_price = format_price(price)
                     
                     st.markdown(f"""
                     <div style="background-color: #2d2d2d; padding: 15px; border-radius: 8px; border: 1px solid #3d3d3d; text-align: center;">
                         <div style="color: #ffffff; font-weight: bold; font-size: 16px; margin-bottom: 8px;">{symbol}</div>
-                        <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-weight: bold; font-size: 24px; margin-bottom: 5px;">${ticker_data['price']:,.2f}</div>
+                        <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-weight: bold; font-size: 24px; margin-bottom: 5px;">{formatted_price}</div>
                         <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">{'▲' if is_up else '▼'} {abs(change_pct):.2f}%</div>
                     </div>
                     """, unsafe_allow_html=True)
@@ -463,7 +477,6 @@ def ticker_carousel():
     
     with nav_col2:
         if st.button("▶", key="next_btn", help="Next symbols"):
-            # Nếu đang ở cuối list, quay về đầu
             if st.session_state.ticker_start_index + visible_count >= total_symbols:
                 st.session_state.ticker_start_index = 0
             else:
@@ -565,12 +578,14 @@ with col4:
         if current_ticker:
             change_pct = current_ticker['change_percent']
             is_up = change_pct >= 0
+            price = current_ticker['price']
+            formatted_price = format_price(price)
             price_class = "control-price-up" if is_up else "control-price-down"
             
             st.markdown(f"""
             <div class="control-price-box">
                 <div class="control-symbol">{st.session_state.selected_symbol}</div>
-                <div class="{price_class}">${current_ticker['price']:,.2f}</div>
+                <div class="{price_class}">{formatted_price}</div>
                 <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">
                     {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
                 </div>
