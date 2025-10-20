@@ -577,52 +577,91 @@ if st.session_state.show_chart:
             )
         )
         
+                # ============================================
+        # SPIKE LINES (CROSSHAIR LINES) - SIMPLE SOLUTION
         # ============================================
-        # SPIKE LINES (CROSSHAIR LINES)
-        # ============================================
+        
+        # Current price line with label (fixed on right side)
+        current_price = df['close'].iloc[-1]
+        is_price_up = df['close'].iloc[-1] >= df['close'].iloc[-2] if len(df) > 1 else True
+        price_color = "#26a69a" if is_price_up else "#ef5350"
+        
+        fig.add_hline(
+            y=current_price,
+            line_dash="solid",
+            line_color=price_color,
+            line_width=2,
+            annotation_text=f"${current_price:,.2f}",
+            annotation_position="right",
+            annotation=dict(
+                font=dict(size=13, color="#ffffff", family="monospace"),
+                bgcolor=price_color,
+                bordercolor=price_color,
+                borderwidth=2,
+                borderpad=6,
+                opacity=0.9
+            ),
+            row=1, col=1
+        )
+        
+        fig.update_layout(
+            height=700,
+            template='plotly_dark',
+            xaxis_rangeslider_visible=False,
+            showlegend=False,
+            hovermode='x unified',
+            dragmode='pan',
+            modebar_add=['zoom2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d'],
+            
+            # Hover label styling
+            hoverlabel=dict(
+                bgcolor="#2d2d2d",
+                font_size=14,
+                font_family="monospace",
+                font_color="#ffffff",
+                bordercolor="#667eea"
+            )
+        )
+        
+        # X-axis spike (vertical crosshair line)
         fig.update_xaxes(
             fixedrange=False,
-            showspikes=True,           # ← Bật spike line dọc
-            spikemode='across',        # ← Kéo dài qua toàn bộ chart
-            spikesnap='cursor',        # ← Snap theo cursor
-            spikecolor='rgba(255,255,255,0.5)',  # ← Màu trắng trong suốt
-            spikethickness=1,          # ← Độ dày line
-            spikedash='dot'            # ← Kiểu đứt nét
+            showspikes=True,              # Enable vertical spike
+            spikemode='across',           # Span across entire chart
+            spikesnap='cursor',           # Follow cursor position
+            spikecolor='rgba(255,255,255,0.5)',  # White semi-transparent
+            spikethickness=1,             # Line thickness
+            spikedash='dot'               # Dotted line style
         )
         
+        # Y-axis spike (horizontal crosshair line) - PRICE CHART (Row 1)
         fig.update_yaxes(
+            row=1, col=1,
             fixedrange=False,
-            showspikes=True,           # ← Bật spike line ngang
-            spikemode='across',        # ← Kéo dài qua toàn bộ chart
-            spikesnap='cursor',        # ← Snap theo cursor
-            spikecolor='rgba(255,255,255,0.5)',  # ← Màu trắng trong suốt
-            spikethickness=1,          # ← Độ dày line
-            spikedash='dot'            # ← Kiểu đứt nét
+            showspikes=True,              # Enable horizontal spike
+            spikemode='across+toaxis',    # Span across + extend to Y-axis
+            spikesnap='cursor',           # Follow cursor position
+            spikecolor='rgba(255,255,255,0.5)',  # White semi-transparent
+            spikethickness=1,             # Line thickness
+            spikedash='dot'               # Dotted line style
         )
         
-        # Labels cho axes
+        # Y-axis spike (horizontal crosshair line) - VOLUME CHART (Row 2)
+        fig.update_yaxes(
+            row=2, col=1,
+            fixedrange=False,
+            showspikes=True,              # Enable horizontal spike
+            spikemode='across',           # Span across entire chart
+            spikesnap='cursor',           # Follow cursor position
+            spikecolor='rgba(255,255,255,0.5)',  # White semi-transparent
+            spikethickness=1,             # Line thickness
+            spikedash='dot'               # Dotted line style
+        )
+        
+        # Axis labels
         fig.update_xaxes(title_text="Time", row=2, col=1)
         fig.update_yaxes(title_text="Price ($)", row=1, col=1)
         fig.update_yaxes(title_text="Volume", row=2, col=1)
-        
-        st.plotly_chart(fig, use_container_width=True, config={
-            'scrollZoom': True,
-            'displayModeBar': True,
-            'displaylogo': False,
-            'modeBarButtonsToRemove': ['select2d', 'lasso2d']
-        })
-        
-        current = df.iloc[-1]
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric("Open", f"${current['open']:.2f}")
-        with col2:
-            st.metric("High", f"${current['high']:.2f}")
-        with col3:
-            st.metric("Low", f"${current['low']:.2f}")
-        with col4:
-            st.metric("Close", f"${current['close']:.2f}")
     
     st.markdown("---")
     # STOP EXECUTION HERE
