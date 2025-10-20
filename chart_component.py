@@ -27,7 +27,7 @@ def render_tradingview_chart(df, symbol, interval):
         subplot_titles=(f'{symbol} - {interval.upper()}', 'Volume')
     )
     
-    # Prepare hover text for candlestick (KHÔNG DÙNG hovertemplate)
+    # Prepare hover text for candlestick
     hover_texts = []
     for _, row in df.iterrows():
         text = (
@@ -50,8 +50,8 @@ def render_tradingview_chart(df, symbol, interval):
             name='Price',
             increasing_line_color='#26a69a',
             decreasing_line_color='#ef5350',
-            hovertext=hover_texts,  # ← DÙNG hovertext thay vì hovertemplate
-            hoverinfo='text'        # ← Hiển thị text
+            hovertext=hover_texts,
+            hoverinfo='text'
         ),
         row=1, col=1
     )
@@ -60,7 +60,6 @@ def render_tradingview_chart(df, symbol, interval):
     colors = ['#26a69a' if row['close'] >= row['open'] else '#ef5350' 
              for _, row in df.iterrows()]
     
-    # Prepare hover text for volume
     volume_texts = [f"Vol: {vol:,.0f}" for vol in df['volume']]
     
     fig.add_trace(
@@ -70,8 +69,8 @@ def render_tradingview_chart(df, symbol, interval):
             name='Volume',
             marker_color=colors,
             opacity=0.6,
-            hovertext=volume_texts,  # ← DÙNG hovertext
-            hoverinfo='text'         # ← Hiển thị text
+            hovertext=volume_texts,
+            hoverinfo='text'
         ),
         row=2, col=1
     )
@@ -177,16 +176,16 @@ def render_tradingview_chart(df, symbol, interval):
             position: absolute;
             background-color: #667eea;
             color: white;
-            padding: 5px 10px;
-            border-radius: 4px;
+            padding: 3px 7px;
+            border-radius: 3px;
             font-family: monospace;
-            font-size: 13px;
+            font-size: 11px;
             font-weight: bold;
             pointer-events: none;
             z-index: 10000;
             display: none;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-            border: 1px solid rgba(255,255,255,0.2);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.3);
             white-space: nowrap;
         }}
         
@@ -230,6 +229,10 @@ def render_tradingview_chart(df, symbol, interval):
                     if (!data.points || data.points.length === 0) return;
                     
                     var point = data.points[0];
+                    
+                    // Skip if hovering over volume chart (only show for price chart)
+                    if (point.fullData.yaxis !== 'y') return;
+                    
                     var yval = point.y;
                     
                     // For candlestick, use close price
@@ -238,6 +241,10 @@ def render_tradingview_chart(df, symbol, interval):
                     }}
                     
                     if (typeof yval === 'undefined') return;
+                    
+                    // Get event position (mouse position)
+                    var event = data.event;
+                    if (!event) return;
                     
                     // Get chart dimensions
                     var plotArea = plotDiv.querySelector('.xy');
@@ -258,8 +265,9 @@ def render_tradingview_chart(df, symbol, interval):
                     var yPercent = (yval - ymin) / (ymax - ymin);
                     var yPos = rect.bottom - (yPercent * rect.height);
                     
-                    // Position label on the right edge
-                    var leftPos = rect.right - containerRect.left + 10;
+                    // Position label AT THE END of horizontal line (right edge of plot area)
+                    // Offset slightly to the left to stay on the crosshair
+                    var leftPos = rect.right - containerRect.left - 70;  // ← 70px từ phải vào
                     var topPos = yPos - containerRect.top - 12;
                     
                     // Update label
@@ -287,7 +295,7 @@ def render_tradingview_chart(df, symbol, interval):
                 }}
             }});
             
-            // Relayout event - Update on zoom/pan
+            // Relayout event - Hide on zoom/pan
             plotDiv.on('plotly_relayout', function() {{
                 if (priceLabel && priceLabel.style.display === 'block') {{
                     priceLabel.style.display = 'none';
