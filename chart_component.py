@@ -1,95 +1,22 @@
 import streamlit as st
+import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import time
+import streamlit.components.v1 as components
 
-def render_tradingview_chart_realtime(chart_ws):
+def render_tradingview_chart(df, symbol, interval):
     """
-    Render real-time TradingView-style chart with WebSocket updates
-    
-    Args:
-        chart_ws: ChartWebSocket instance
-    """
-    
-    # Create placeholder for chart
-    chart_placeholder = st.empty()
-    
-    # Fragment that auto-refreshes every 300ms
-    @st.fragment(run_every="0.3s")
-    def update_chart():
-        df = chart_ws.get_dataframe()
-        
-        if df is None or len(df) == 0:
-            chart_placeholder.warning("⏳ Waiting for real-time data...")
-            return
-        
-        # Create chart
-        fig = create_chart(df, chart_ws.symbol.upper(), chart_ws.interval)
-        
-        # Render chart
-        chart_placeholder.plotly_chart(
-            fig, 
-            use_container_width=True, 
-            config={
-                'scrollZoom': True,
-                'displayModeBar': True,
-                'displaylogo': False,
-                'modeBarButtonsToRemove': ['select2d', 'lasso2d'],
-                'responsive': True
-            }
-        )
-    
-    update_chart()
-    
-    # Real-time metrics below chart
-    @st.fragment(run_every="0.3s")
-    def update_metrics():
-        df = chart_ws.get_dataframe()
-        
-        if df is not None and len(df) > 0:
-            current = df.iloc[-1]
-            prev = df.iloc[-2] if len(df) > 1 else current
-            
-            col1, col2, col3, col4, col5 = st.columns(5)
-            
-            with col1:
-                st.metric("Open", f"${current['open']:.2f}")
-            
-            with col2:
-                high_change = ((current['high'] / prev['high']) - 1) * 100 if prev['high'] > 0 else 0
-                st.metric("High", f"${current['high']:.2f}", 
-                         delta=f"{high_change:+.2f}%")
-            
-            with col3:
-                low_change = ((current['low'] / prev['low']) - 1) * 100 if prev['low'] > 0 else 0
-                st.metric("Low", f"${current['low']:.2f}", 
-                         delta=f"{low_change:+.2f}%")
-            
-            with col4:
-                close_change = ((current['close'] / prev['close']) - 1) * 100 if prev['close'] > 0 else 0
-                st.metric("Close", f"${current['close']:.2f}", 
-                         delta=f"{close_change:+.2f}%")
-            
-            with col5:
-                vol_change = ((current['volume'] / prev['volume']) - 1) * 100 if prev['volume'] > 0 else 0
-                st.metric("Volume", f"{current['volume']:,.0f}", 
-                         delta=f"{vol_change:+.1f}%")
-    
-    update_metrics()
-
-
-def create_chart(df, symbol, interval):
-    """
-    Create Plotly candlestick chart with volume
+    Render TradingView-style chart with dynamic price label
     
     Args:
         df: DataFrame with OHLCV data
-        symbol: Trading symbol
-        interval: Timeframe
-    
-    Returns:
-        Plotly figure
+        symbol: Trading symbol (e.g., 'ETHUSDT')
+        interval: Timeframe (e.g., '15m', '1h', '4h', '1d')
     """
+    
+    if df is None or len(df) == 0:
+        st.error("No data available for chart")
+        return
     
     # Create subplots
     fig = make_subplots(
@@ -97,19 +24,18 @@ def create_chart(df, symbol, interval):
         shared_xaxes=True,
         vertical_spacing=0.03,
         row_heights=[0.7, 0.3],
-        subplot_titles=(f'{symbol} - {interval.upper()} (Real-Time)', 'Volume')
+        subplot_titles=(f'{symbol} - {interval.upper()}', 'Volume')
     )
     
     # Prepare hover text for candlestick
     hover_texts = []
     for _, row in df.iterrows():
         text = (
-            f"{row['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}<br>"
-            f"<b>Open:</b> ${row['open']:.2f}<br>"
-            f"<b>High:</b> ${row['high']:.2f}<br>"
-            f"<b>Low:</b> ${row['low']:.2f}<br>"
-            f"<b>Close:</b> ${row['close']:.2f}<br>"
-            f"<b>Volume:</b> {row['volume']:,.0f}"
+            f"{row['timestamp'].strftime('%Y-%m-%d %H:%M')}<br>"
+            f"O: ${row['open']:.2f}<br>"
+            f"H: ${row['high']:.2f}<br>"
+            f"L: ${row['low']:.2f}<br>"
+            f"C: ${row['close']:.2f}"
         )
         hover_texts.append(text)
     
@@ -124,8 +50,6 @@ def create_chart(df, symbol, interval):
             name='Price',
             increasing_line_color='#26a69a',
             decreasing_line_color='#ef5350',
-            increasing_fillcolor='#26a69a',
-            decreasing_fillcolor='#ef5350',
             hovertext=hover_texts,
             hoverinfo='text'
         ),
@@ -136,11 +60,7 @@ def create_chart(df, symbol, interval):
     colors = ['#26a69a' if row['close'] >= row['open'] else '#ef5350' 
              for _, row in df.iterrows()]
     
-    volume_texts = [
-        f"{row['timestamp'].strftime('%Y-%m-%d %H:%M')}<br>"
-        f"<b>Volume:</b> {row['volume']:,.0f}"
-        for _, row in df.iterrows()
-    ]
+    volume_texts = [f"Vol: {vol:,.0f}" for vol in df['volume']]
     
     fig.add_trace(
         go.Bar(
@@ -155,19 +75,17 @@ def create_chart(df, symbol, interval):
         row=2, col=1
     )
     
-    # Current price line with label
+    # Current price line with static label
     current_price = df['close'].iloc[-1]
-    prev_price = df['close'].iloc[-2] if len(df) > 1 else current_price
-    is_price_up = current_price >= prev_price
+    is_price_up = df['close'].iloc[-1] >= df['close'].iloc[-2] if len(df) > 1 else True
     price_color = "#26a69a" if is_price_up else "#ef5350"
-    price_change = ((current_price / prev_price) - 1) * 100 if prev_price > 0 else 0
     
     fig.add_hline(
         y=current_price,
         line_dash="solid",
         line_color=price_color,
         line_width=2,
-        annotation_text=f"${current_price:,.2f} ({price_change:+.2f}%)",
+        annotation_text=f"${current_price:,.2f}",
         annotation_position="right",
         annotation=dict(
             font=dict(size=12, color="#ffffff", family="monospace"),
@@ -175,7 +93,7 @@ def create_chart(df, symbol, interval):
             bordercolor=price_color,
             borderwidth=2,
             borderpad=5,
-            opacity=0.95
+            opacity=0.9
         ),
         row=1, col=1
     )
@@ -188,19 +106,17 @@ def create_chart(df, symbol, interval):
         showlegend=False,
         hovermode='x unified',
         dragmode='pan',
-        transition={'duration': 100},
+        modebar_add=['zoom2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d'],
         hoverlabel=dict(
             bgcolor="#2d2d2d",
             font_size=13,
             font_family="monospace",
             font_color="#ffffff",
             bordercolor="#667eea"
-        ),
-        paper_bgcolor='#1e1e1e',
-        plot_bgcolor='#1e1e1e'
+        )
     )
     
-    # X-axis configuration with spikes
+    # X-axis spikes (vertical crosshair)
     fig.update_xaxes(
         fixedrange=False,
         showspikes=True,
@@ -208,11 +124,10 @@ def create_chart(df, symbol, interval):
         spikesnap='cursor',
         spikecolor='rgba(255,255,255,0.5)',
         spikethickness=1,
-        spikedash='dot',
-        gridcolor='#2d2d2d'
+        spikedash='dot'
     )
     
-    # Y-axis configuration - Price chart
+    # Y-axis spikes (horizontal crosshair) - Price chart
     fig.update_yaxes(
         row=1, col=1,
         fixedrange=False,
@@ -221,11 +136,10 @@ def create_chart(df, symbol, interval):
         spikesnap='cursor',
         spikecolor='rgba(255,255,255,0.5)',
         spikethickness=1,
-        spikedash='dot',
-        gridcolor='#2d2d2d'
+        spikedash='dot'
     )
     
-    # Y-axis configuration - Volume chart
+    # Y-axis spikes (horizontal crosshair) - Volume chart
     fig.update_yaxes(
         row=2, col=1,
         fixedrange=False,
@@ -234,8 +148,7 @@ def create_chart(df, symbol, interval):
         spikesnap='cursor',
         spikecolor='rgba(255,255,255,0.5)',
         spikethickness=1,
-        spikedash='dot',
-        gridcolor='#2d2d2d'
+        spikedash='dot'
     )
     
     # Axis labels
@@ -243,4 +156,175 @@ def create_chart(df, symbol, interval):
     fig.update_yaxes(title_text="Price ($)", row=1, col=1)
     fig.update_yaxes(title_text="Volume", row=2, col=1)
     
-    return fig
+    # Convert to HTML
+    chart_html = fig.to_html(
+        include_plotlyjs='cdn',
+        config={
+            'scrollZoom': True,
+            'displayModeBar': True,
+            'displaylogo': False,
+            'modeBarButtonsToRemove': ['select2d', 'lasso2d']
+        }
+    )
+    
+    # ============================================
+    # CUSTOM JAVASCRIPT FOR DYNAMIC PRICE LABEL
+    # ============================================
+    custom_js = f"""
+    <style>
+        .dynamic-price-label {{
+            position: absolute;
+            background-color: #667eea;
+            color: white;
+            padding: 3px 7px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 11px;
+            font-weight: bold;
+            pointer-events: none;
+            z-index: 10000;
+            display: none;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.3);
+            white-space: nowrap;
+        }}
+        
+        .dynamic-price-label.up {{
+            background-color: #26a69a;
+            border-color: #26a69a;
+        }}
+        
+        .dynamic-price-label.down {{
+            background-color: #ef5350;
+            border-color: #ef5350;
+        }}
+    </style>
+    
+    <div id="dynamic-price-label" class="dynamic-price-label"></div>
+    
+    <script>
+    (function() {{
+        var currentPrice = {current_price};
+        var priceLabel = null;
+        var plotDiv = null;
+        var isInitialized = false;
+        
+        function initCrosshair() {{
+            plotDiv = document.querySelector('.plotly-graph-div');
+            priceLabel = document.getElementById('dynamic-price-label');
+            
+            if (!plotDiv || !priceLabel) {{
+                setTimeout(initCrosshair, 100);
+                return;
+            }}
+            
+            if (isInitialized) return;
+            isInitialized = true;
+            
+            console.log('🎯 TradingView Crosshair Initialized');
+            
+            // Hover event - Show dynamic price label
+            plotDiv.on('plotly_hover', function(data) {{
+                try {{
+                    if (!data.points || data.points.length === 0) return;
+                    
+                    var point = data.points[0];
+                    
+                    // Skip if hovering over volume chart (only show for price chart)
+                    if (point.fullData.yaxis !== 'y') return;
+                    
+                    var yval = point.y;
+                    
+                    // For candlestick, use close price
+                    if (typeof yval === 'undefined' && point.close) {{
+                        yval = point.close;
+                    }}
+                    
+                    if (typeof yval === 'undefined') return;
+                    
+                    // Get event position (mouse position)
+                    var event = data.event;
+                    if (!event) return;
+                    
+                    // Get chart dimensions
+                    var plotArea = plotDiv.querySelector('.xy');
+                    if (!plotArea) return;
+                    
+                    var rect = plotArea.getBoundingClientRect();
+                    var containerRect = plotDiv.getBoundingClientRect();
+                    
+                    // Get Y-axis range from layout
+                    var layout = plotDiv.layout;
+                    if (!layout || !layout.yaxis || !layout.yaxis.range) return;
+                    
+                    var yrange = layout.yaxis.range;
+                    var ymin = yrange[0];
+                    var ymax = yrange[1];
+                    
+                    // Calculate Y position in pixels
+                    var yPercent = (yval - ymin) / (ymax - ymin);
+                    var yPos = rect.bottom - (yPercent * rect.height);
+                    
+                    // Position label AT THE END of horizontal line (right edge of plot area)
+                    // Offset slightly to the left to stay on the crosshair
+                    var leftPos = rect.right - containerRect.left - 70;  // ← 70px từ phải vào
+                    var topPos = yPos - containerRect.top - 12;
+                    
+                    // Update label
+                    priceLabel.style.display = 'block';
+                    priceLabel.style.left = leftPos + 'px';
+                    priceLabel.style.top = topPos + 'px';
+                    priceLabel.textContent = '$' + yval.toFixed(2);
+                    
+                    // Change color based on current price
+                    priceLabel.className = 'dynamic-price-label';
+                    if (yval >= currentPrice) {{
+                        priceLabel.classList.add('up');
+                    }} else {{
+                        priceLabel.classList.add('down');
+                    }}
+                }} catch(e) {{
+                    console.error('Crosshair error:', e);
+                }}
+            }});
+            
+            // Unhover event - Hide label
+            plotDiv.on('plotly_unhover', function() {{
+                if (priceLabel) {{
+                    priceLabel.style.display = 'none';
+                }}
+            }});
+            
+            // Relayout event - Hide on zoom/pan
+            plotDiv.on('plotly_relayout', function() {{
+                if (priceLabel && priceLabel.style.display === 'block') {{
+                    priceLabel.style.display = 'none';
+                }}
+            }});
+        }}
+        
+        // Initialize when DOM is ready
+        if (document.readyState === 'loading') {{
+            document.addEventListener('DOMContentLoaded', initCrosshair);
+        }} else {{
+            setTimeout(initCrosshair, 100);
+        }}
+    }})();
+    </script>
+    """
+    
+    # Render chart with custom JavaScript
+    components.html(chart_html + custom_js, height=750, scrolling=False)
+    
+    # Metrics below chart
+    current = df.iloc[-1]
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Open", f"${current['open']:.2f}")
+    with col2:
+        st.metric("High", f"${current['high']:.2f}")
+    with col3:
+        st.metric("Low", f"${current['low']:.2f}")
+    with col4:
+        st.metric("Close", f"${current['close']:.2f}")
