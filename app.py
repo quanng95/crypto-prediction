@@ -195,7 +195,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Symbols
-SYMBOLS = ["ETHUSDT", "BTCUSDT", "BNBUSDT", "SOLUSDT", "ADAUSDT", "DOGEUSDT", "ARBUSDT", "PAXGUSDT"]
+SYMBOLS = ["ETHUSDT", "BTCUSDT", "PAXGUSDT", "BNBUSDT", "SOLUSDT", "DOGEUSDT", "KAITOUSDT", "ADAUSDT"]
 
 # Initialize session state
 if 'show_chart' not in st.session_state:
