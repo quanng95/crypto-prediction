@@ -12,4 +12,3 @@ websocket-client
 streamlit-autorefresh
 streamlit_cookies_manager
 psycopg2-binary
-extra-streamlit-components

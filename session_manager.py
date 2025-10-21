@@ -1,57 +1,70 @@
 import streamlit as st
-import extra_streamlit_components as stx
 from database_postgres import Database
+import streamlit.components.v1 as components
 
 class SessionManager:
-    def __init__(self):
-        self.cookie_manager = stx.CookieManager()
     
-    def save_session(self, session_token: str, remember_days: int = 30):
-        """Save session token to cookie"""
-        try:
-            self.cookie_manager.set(
-                'session_token', 
-                session_token,
-                expires_at=None if remember_days == 0 else f"{remember_days}d"
-            )
-            print(f"✅ Session saved to cookie")
-        except Exception as e:
-            print(f"Error saving session: {e}")
+    @staticmethod
+    def save_session_to_browser(session_token: str):
+        """Save session to browser localStorage"""
+        components.html(
+            f"""
+            <script>
+                localStorage.setItem('session_token', '{session_token}');
+                console.log('Session saved to localStorage');
+            </script>
+            """,
+            height=0,
+        )
     
-    def get_session(self) -> str:
-        """Get session token from cookie"""
-        try:
-            token = self.cookie_manager.get('session_token')
-            if token:
-                print(f"✅ Session found in cookie")
-            return token
-        except Exception as e:
-            print(f"Error getting session: {e}")
-            return None
+    @staticmethod
+    def get_session_from_browser():
+        """Get session from browser localStorage"""
+        session_token = components.html(
+            """
+            <script>
+                const token = localStorage.getItem('session_token');
+                if (token) {
+                    window.parent.postMessage({type: 'streamlit:setComponentValue', value: token}, '*');
+                } else {
+                    window.parent.postMessage({type: 'streamlit:setComponentValue', value: null}, '*');
+                }
+            </script>
+            """,
+            height=0,
+        )
+        return session_token
     
-    def clear_session(self):
-        """Clear session from cookie"""
-        try:
-            self.cookie_manager.delete('session_token')
-            print(f"✅ Session cleared from cookie")
-        except Exception as e:
-            print(f"Error clearing session: {e}")
+    @staticmethod
+    def clear_session_from_browser():
+        """Clear session from browser localStorage"""
+        components.html(
+            """
+            <script>
+                localStorage.removeItem('session_token');
+                console.log('Session cleared from localStorage');
+            </script>
+            """,
+            height=0,
+        )
     
-    def auto_login(self):
-        """Auto login from cookie"""
+    @staticmethod
+    def auto_login():
+        """Auto login from session"""
+        # Skip if already authenticated
         if st.session_state.get('authenticated', False):
             return True
         
-        token = self.get_session()
-        
-        if token:
+        # Check if session_token exists in session_state (from previous page load)
+        if 'session_token' in st.session_state and st.session_state.session_token:
+            token = st.session_state.session_token
+            
             db = Database()
             user = db.validate_session(token)
             
             if user:
                 st.session_state.authenticated = True
                 st.session_state.user = user
-                st.session_state.session_token = token
                 
                 # Load user's symbols
                 symbols = db.get_user_symbols(user['id'])
@@ -61,7 +74,7 @@ class SessionManager:
                 print(f"✅ Auto-login successful for {user['username']}")
                 return True
             else:
-                # Invalid token, clear cookie
-                self.clear_session()
+                # Invalid token, clear it
+                del st.session_state.session_token
         
         return False
