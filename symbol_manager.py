@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 from typing import List, Dict
-from datetime import datetime
 
 class SymbolManager:
     """Simple symbol manager with search"""
@@ -26,7 +25,7 @@ class SymbolManager:
             
             return symbols
         except Exception as e:
-            print(f"Error fetching Binance symbols: {e}")
+            print(f"Error: {e}")
             return []
     
     @staticmethod
@@ -52,7 +51,7 @@ class SymbolManager:
 
 def render_simple_add_symbol(current_symbols: List[str]) -> List[str]:
     """
-    Simple symbol add interface with FORCED database persistence
+    Simple symbol add interface
     Returns updated symbol list
     """
     
@@ -102,56 +101,14 @@ def render_simple_add_symbol(current_symbols: List[str]) -> List[str]:
                 with col2:
                     if symbol not in current_symbols:
                         if st.button("➕", key=f"add_{symbol}", use_container_width=True):
-                            # Add to current symbols
-                            updated_symbols = current_symbols + [symbol]
+                            current_symbols.append(symbol)
                             
-                            # ✅ FORCE SAVE TO DATABASE if authenticated
-                            if st.session_state.get('authenticated', False):
-                                from database import Database
-                                db = Database()
-                                
-                                # Try to save 3 times
-                                for attempt in range(3):
-                                    success = db.save_user_symbols(
-                                        st.session_state.user['id'], 
-                                        updated_symbols
-                                    )
-                                    
-                                    if success:
-                                        # Verify by reading back
-                                        saved_symbols, _ = db.get_symbols_with_timestamp(st.session_state.user['id'])
-                                        
-                                        if symbol in saved_symbols:
-                                            print(f"✅ Attempt {attempt + 1}: {symbol} verified in database")
-                                            
-                                            # Update session state
-                                            st.session_state.SYMBOLS = updated_symbols
-                                            st.session_state.symbols_timestamp = datetime.now().isoformat()
-                                            
-                                            # Clear search
-                                            st.session_state.search_query = ""
-                                            st.session_state.show_suggestions = False
-                                            
-                                            st.success(f"✅ Added {symbol}!")
-                                            return updated_symbols
-                                        else:
-                                            print(f"⚠️ Attempt {attempt + 1}: {symbol} not found in database, retrying...")
-                                            time.sleep(0.1)
-                                    else:
-                                        print(f"❌ Attempt {attempt + 1}: Failed to save")
-                                        time.sleep(0.1)
-                                
-                                st.error(f"❌ Failed to save {symbol} after 3 attempts!")
-                                return current_symbols
-                            else:
-                                # Not authenticated
-                                st.session_state.SYMBOLS = updated_symbols
-                                st.session_state.search_query = ""
-                                st.session_state.show_suggestions = False
-                                st.success(f"✅ Added {symbol}!")
-                                return updated_symbols
-                    else:
-                        st.markdown("✓")
+                            # Clear search and hide suggestions
+                            st.session_state.search_query = ""
+                            st.session_state.show_suggestions = False
+                            
+                            st.success(f"✅ Added {symbol}!")
+                            st.rerun()
         else:
             st.info("No symbols found")
     
