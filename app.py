@@ -19,9 +19,6 @@ from methodology import render_methodology_tab
 # Import chart component
 from chart_component import render_tradingview_chart
 
-# Import sidebar
-from sidebar import render_custom_sidebar
-
 
 # Page config
 st.set_page_config(
@@ -407,6 +404,15 @@ def calculate_trading_signal(predictor, timeframe):
         'mid_term_change': mid_change
     }
 
+# ============================================
+# BEAUTIFUL HEADER
+# ============================================
+st.markdown("""
+<div class="header-container">
+    <h1 class="header-title">🔮 Crypto Prediction</h1>
+</div>
+""", unsafe_allow_html=True)
+
 def format_price(price):
     """Format price based on its value"""
     if price >= 1000:
@@ -420,26 +426,9 @@ def format_price(price):
     elif price >= 0.0001:
         return f"${price:,.8f}"
     else:
+        # Cho các coin như PEPE (giá rất nhỏ)
         return f"${price:.11f}".rstrip('0').rstrip('.')
-
-# ============================================
-# RENDER SIDEBAR
-# ============================================
-render_custom_sidebar(
-    st.session_state.ws_handler,
-    SYMBOLS,
-    st.session_state.selected_symbol
-)
-
-# ============================================
-# BEAUTIFUL HEADER
-# ============================================
-st.markdown("""
-<div class="header-container">
-    <h1 class="header-title">🔮 Crypto Prediction</h1>
-</div>
-""", unsafe_allow_html=True)
-
+    
 # ============================================
 # TICKER CAROUSEL (Fragment with auto-refresh)
 # ============================================
@@ -500,7 +489,7 @@ def ticker_carousel():
 ticker_carousel()
 
 # ============================================
-# CHART CONTAINER
+# CHART CONTAINER - SỬ DỤNG COMPONENT
 # ============================================
 if st.session_state.show_chart:
     st.markdown("---")
@@ -527,6 +516,7 @@ if st.session_state.show_chart:
             st.session_state.show_chart = False
             st.rerun()
     
+    # Get chart data
     cache_key = f"{st.session_state.chart_symbol}_{st.session_state.chart_interval}"
     
     if cache_key not in st.session_state.chart_data_cache:
@@ -535,6 +525,7 @@ if st.session_state.show_chart:
     else:
         df = st.session_state.chart_data_cache[cache_key]
     
+    # Render TradingView-style chart
     render_tradingview_chart(df, st.session_state.chart_symbol, st.session_state.chart_interval)
     
     st.markdown("---")
