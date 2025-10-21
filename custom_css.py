@@ -160,5 +160,24 @@ def get_custom_css():
     .stTabs [aria-selected="true"] {
         color: #ffffff !important;
     }
+    /* Auth Pages Styles */
+    .auth-container {
+        max-width: 500px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+    
+    input[type="text"], input[type="password"], input[type="email"] {
+        background-color: #2d2d2d !important;
+        border: 1px solid #3d3d3d !important;
+        color: #e0e0e0 !important;
+        border-radius: 5px !important;
+        padding: 10px !important;
+    }
+    
+    input[type="text"]:focus, input[type="password"]:focus, input[type="email"]:focus {
+        border-color: #3498db !important;
+        box-shadow: 0 0 5px rgba(52, 152, 219, 0.5) !important;
+    }
 </style>
 """

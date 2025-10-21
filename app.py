@@ -11,7 +11,9 @@ from eth import AdvancedETHPredictor
 from chart_component import render_tradingview_chart
 from custom_css import get_custom_css
 from tabs_content import render_all_tabs
-from symbol_manager import render_simple_add_symbol  # Simple version of symbol manager
+from symbol_manager import render_simple_add_symbol
+from auth_pages import render_login_page, render_signup_page, render_user_menu
+from database import Database
 
 # Page config
 st.set_page_config(
@@ -23,12 +25,41 @@ st.set_page_config(
 # Apply custom CSS
 st.markdown(get_custom_css(), unsafe_allow_html=True)
 
+# Initialize page state
+if 'page' not in st.session_state:
+    st.session_state.page = "home"
+
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+
+if 'user' not in st.session_state:
+    st.session_state.user = None
+
+# Handle page routing
+if st.session_state.page == "login":
+    render_login_page()
+    st.stop()
+
+if st.session_state.page == "signup":
+    render_signup_page()
+    st.stop()
+
+# HOME PAGE - Continue with normal app
 # Initialize default symbols in session state
 if 'SYMBOLS' not in st.session_state:
-    st.session_state.SYMBOLS = [
-        "ETHUSDT", "BTCUSDT", "PAXGUSDT", "BNBUSDT", "SOLUSDT", 
-        "LINKUSDT", "PEPEUSDT", "XRPUSDT", "DOGEUSDT", "KAITOUSDT", "ADAUSDT"
-    ]
+    if st.session_state.authenticated:
+        # Load user's symbols
+        db = Database()
+        symbols = db.get_user_symbols(st.session_state.user['id'])
+        st.session_state.SYMBOLS = symbols if symbols else [
+            "ETHUSDT", "BTCUSDT", "PAXGUSDT", "BNBUSDT", "SOLUSDT",
+            "LINKUSDT", "PEPEUSDT", "XRPUSDT", "DOGEUSDT", "KAITOUSDT", "ADAUSDT"
+        ]
+    else:
+        st.session_state.SYMBOLS = [
+            "ETHUSDT", "BTCUSDT", "PAXGUSDT", "BNBUSDT", "SOLUSDT",
+            "LINKUSDT", "PEPEUSDT", "XRPUSDT", "DOGEUSDT", "KAITOUSDT", "ADAUSDT"
+        ]
 
 SYMBOLS = st.session_state.SYMBOLS
 
@@ -55,15 +86,16 @@ if 'last_refresh' not in st.session_state:
     st.session_state.last_refresh = time.time()
 if 'chart_data_cache' not in st.session_state:
     st.session_state.chart_data_cache = {}
+if 'hover_symbol' not in st.session_state:
+    st.session_state.hover_symbol = None
 
 # Initialize WebSocket
 if 'ws_handler' not in st.session_state:
     st.session_state.ws_handler = BinanceWebSocket()
     st.session_state.ws_handler.start(SYMBOLS)
-    st.session_state.ws_symbols = SYMBOLS.copy()  # Track current symbols
+    st.session_state.ws_symbols = SYMBOLS.copy()
     print("🚀 WebSocket initialized")
 elif st.session_state.ws_symbols != SYMBOLS:
-    # Restart WebSocket if symbols changed
     st.session_state.ws_handler.stop()
     st.session_state.ws_handler = BinanceWebSocket()
     st.session_state.ws_handler.start(SYMBOLS)
@@ -139,6 +171,11 @@ def format_price(price):
         return f"${price:.11f}".rstrip('0').rstrip('.')
 
 # ============================================
+# USER MENU (TOP RIGHT)
+# ============================================
+render_user_menu()
+
+# ============================================
 # BEAUTIFUL HEADER
 # ============================================
 st.markdown("""
@@ -148,7 +185,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================
-# SIMPLE ADD SYMBOL (NEW - Đơn giản)
+# SIMPLE ADD SYMBOL
 # ============================================
 st.markdown("---")
 
@@ -158,20 +195,25 @@ if updated_symbols != st.session_state.SYMBOLS:
     st.session_state.SYMBOLS = updated_symbols
     SYMBOLS = updated_symbols
     
+    # Save to database if authenticated
+    if st.session_state.authenticated:
+        db = Database()
+        db.save_user_symbols(st.session_state.user['id'], SYMBOLS)
+    
     # Restart WebSocket
     st.session_state.ws_handler.stop()
     st.session_state.ws_handler = BinanceWebSocket()
     st.session_state.ws_handler.start(SYMBOLS)
-    st.session_state.ws_symbols = SYMBOLS.copy()  # Update tracked symbols
+    st.session_state.ws_symbols = SYMBOLS.copy()
     
     st.rerun()
 
 # ============================================
-# TICKER CAROUSEL
+# TICKER CAROUSEL WITH REMOVE BUTTON
 # ============================================
 @st.fragment(run_every="0.5s")
 def ticker_carousel():
-    """Ticker carousel with auto-refresh and loop navigation"""
+    """Ticker carousel with auto-refresh and remove functionality"""
     st.markdown("---")
     
     visible_count = 4
@@ -202,18 +244,37 @@ def ticker_carousel():
                     price = ticker_data['price']
                     formatted_price = format_price(price)
                     
+                    # Ticker card with hover effect
                     st.markdown(f"""
-                    <div style="background-color: #2d2d2d; padding: 15px; border-radius: 8px; border: 1px solid #3d3d3d; text-align: center;">
+                    <div id="ticker_{symbol}" style="background-color: #2d2d2d; padding: 15px; border-radius: 8px; border: 1px solid #3d3d3d; text-align: center; position: relative;">
                         <div style="color: #ffffff; font-weight: bold; font-size: 16px; margin-bottom: 8px;">{symbol}</div>
                         <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-weight: bold; font-size: 24px; margin-bottom: 5px;">{formatted_price}</div>
                         <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">{'▲' if is_up else '▼'} {abs(change_pct):.2f}%</div>
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    if st.button("📊 Chart", key=f"chart_{symbol}", use_container_width=True, type="secondary"):
-                        st.session_state.show_chart = True
-                        st.session_state.chart_symbol = symbol
-                        st.rerun()
+                    col_chart, col_remove = st.columns([1, 1])
+                    
+                    with col_chart:
+                        if st.button("📊", key=f"chart_{symbol}", use_container_width=True, type="secondary", help="View chart"):
+                            st.session_state.show_chart = True
+                            st.session_state.chart_symbol = symbol
+                            st.rerun()
+                    
+                    with col_remove:
+                        if st.button("❌", key=f"remove_{symbol}", use_container_width=True, type="secondary", help="Remove symbol"):
+                            if len(SYMBOLS) > 1:  # Keep at least 1 symbol
+                                st.session_state.SYMBOLS.remove(symbol)
+                                
+                                # Save to database if authenticated
+                                if st.session_state.authenticated:
+                                    db = Database()
+                                    db.save_user_symbols(st.session_state.user['id'], st.session_state.SYMBOLS)
+                                
+                                st.success(f"✅ Removed {symbol}!")
+                                st.rerun()
+                            else:
+                                st.warning("⚠️ Cannot remove last symbol!")
     
     with nav_col2:
         if st.button("▶", key="next_btn", help="Next symbols"):
