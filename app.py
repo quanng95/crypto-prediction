@@ -15,6 +15,7 @@ from symbol_manager import render_simple_add_symbol
 from auth_pages import render_login_page, render_signup_page, render_user_menu
 from database import Database
 from admin_panel import render_admin_login, render_admin_panel
+from session_manager import SessionManager  # NEW
 
 # Page config
 st.set_page_config(
@@ -38,6 +39,31 @@ if 'user' not in st.session_state:
 
 if 'admin_authenticated' not in st.session_state:
     st.session_state.admin_authenticated = False
+
+# AUTO-LOGIN FROM COOKIES (NEW)
+if not st.session_state.authenticated:
+    try:
+        session_manager = SessionManager()
+        session_data = session_manager.load_session()
+        
+        if session_data:
+            # Restore user session
+            st.session_state.authenticated = True
+            st.session_state.user = {
+                'id': session_data['user_id'],
+                'username': session_data['username'],
+                'email': session_data['email']
+            }
+            
+            # Load user's symbols
+            db = Database()
+            symbols = db.get_user_symbols(session_data['user_id'])
+            if symbols:
+                st.session_state.SYMBOLS = symbols
+            
+            print(f"✅ Auto-login: {session_data['username']}")
+    except Exception as e:
+        print(f"Auto-login error: {e}")
 
 # Admin panel routing
 if st.session_state.page == "admin":
