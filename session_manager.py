@@ -1,76 +1,67 @@
-import json
-import hashlib
-import os
-from datetime import datetime, timedelta
-from pathlib import Path
+import streamlit as st
+import extra_streamlit_components as stx
+from database_postgres import Database
 
 class SessionManager:
     def __init__(self):
-        self.session_dir = Path(".streamlit_sessions")
-        self.session_dir.mkdir(exist_ok=True)
-        self.session_file = self.session_dir / "active_session.json"
+        self.cookie_manager = stx.CookieManager()
     
-    def create_session_token(self, user_id: int, username: str) -> str:
-        """Create a session token"""
-        data = f"{user_id}:{username}:{datetime.now().isoformat()}"
-        token = hashlib.sha256(data.encode()).hexdigest()
-        return token
-    
-    def save_session(self, user: dict, remember_me: bool = True):
-        """Save user session to file"""
-        session_data = {
-            'user_id': user['id'],
-            'username': user['username'],
-            'email': user['email'],
-            'token': self.create_session_token(user['id'], user['username']),
-            'timestamp': datetime.now().isoformat(),
-            'remember_me': remember_me
-        }
-        
-        # Set expiration
-        if remember_me:
-            expiry = datetime.now() + timedelta(days=30)
-            session_data['expiry'] = expiry.isoformat()
-        
+    def save_session(self, session_token: str, remember_days: int = 30):
+        """Save session token to cookie"""
         try:
-            with open(self.session_file, 'w') as f:
-                json.dump(session_data, f)
-            print(f"✅ Session saved for {user['username']}")
+            self.cookie_manager.set(
+                'session_token', 
+                session_token,
+                expires_at=None if remember_days == 0 else f"{remember_days}d"
+            )
+            print(f"✅ Session saved to cookie")
         except Exception as e:
             print(f"Error saving session: {e}")
     
-    def load_session(self) -> dict:
-        """Load user session from file"""
+    def get_session(self) -> str:
+        """Get session token from cookie"""
         try:
-            if not self.session_file.exists():
-                return None
-            
-            with open(self.session_file, 'r') as f:
-                session_data = json.load(f)
-            
-            # Check expiry if exists
-            if 'expiry' in session_data:
-                expiry = datetime.fromisoformat(session_data['expiry'])
-                if datetime.now() > expiry:
-                    self.clear_session()
-                    return None
-            
-            return session_data
-        
+            token = self.cookie_manager.get('session_token')
+            if token:
+                print(f"✅ Session found in cookie")
+            return token
         except Exception as e:
-            print(f"Error loading session: {e}")
+            print(f"Error getting session: {e}")
             return None
     
     def clear_session(self):
-        """Clear user session"""
+        """Clear session from cookie"""
         try:
-            if self.session_file.exists():
-                os.remove(self.session_file)
-            print("✅ Session cleared")
+            self.cookie_manager.delete('session_token')
+            print(f"✅ Session cleared from cookie")
         except Exception as e:
             print(f"Error clearing session: {e}")
     
-    def is_valid_session(self) -> bool:
-        """Check if session is valid"""
-        session_data = self.load_session()
-        return session_data is not None
+    def auto_login(self):
+        """Auto login from cookie"""
+        if st.session_state.get('authenticated', False):
+            return True
+        
+        token = self.get_session()
+        
+        if token:
+            db = Database()
+            user = db.validate_session(token)
+            
+            if user:
+                st.session_state.authenticated = True
+                st.session_state.user = user
+                st.session_state.session_token = token
+                
+                # Load user's symbols
+                symbols = db.get_user_symbols(user['id'])
+                if symbols:
+                    st.session_state.SYMBOLS = symbols
+                
+                print(f"✅ Auto-login successful for {user['username']}")
+                return True
+            else:
+                # Invalid token, clear cookie
+                self.clear_session()
+        
+        return False

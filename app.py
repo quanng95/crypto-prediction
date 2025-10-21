@@ -276,13 +276,17 @@ def ticker_carousel():
                     
                     with col_remove:
                         if st.button("❌", key=f"remove_{symbol}", use_container_width=True, type="secondary", help=f"Remove {symbol}"):
-                            if len(SYMBOLS) > 1:  # Keep at least 1 symbol
+                            if len(SYMBOLS) > 1:
                                 st.session_state.SYMBOLS.remove(symbol)
                                 
-                                # Save to database if authenticated
-                                if st.session_state.authenticated:
+                                # Auto-save to database if authenticated
+                                if st.session_state.get('authenticated', False):
                                     db = Database()
-                                    db.save_user_symbols(st.session_state.user['id'], st.session_state.SYMBOLS)
+                                    db.save_user_symbols(
+                                        st.session_state.user['id'], 
+                                        st.session_state.SYMBOLS
+                                    )
+                                    print(f"✅ Symbols auto-saved after removing {symbol}")
                                 
                                 st.success(f"✅ Removed {symbol}!")
                                 st.rerun()

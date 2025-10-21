@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 from typing import List, Dict
+from database_postgres import Database
 
 class SymbolManager:
     """Simple symbol manager with search"""
@@ -51,7 +52,7 @@ class SymbolManager:
 
 def render_simple_add_symbol(current_symbols: List[str]) -> List[str]:
     """
-    Simple symbol add interface
+    Simple symbol add interface with auto-save
     Returns updated symbol list
     """
     
@@ -102,6 +103,15 @@ def render_simple_add_symbol(current_symbols: List[str]) -> List[str]:
                     if symbol not in current_symbols:
                         if st.button("➕", key=f"add_{symbol}", use_container_width=True):
                             current_symbols.append(symbol)
+                            
+                            # Auto-save to database if authenticated
+                            if st.session_state.get('authenticated', False):
+                                db = Database()
+                                db.save_user_symbols(
+                                    st.session_state.user['id'], 
+                                    current_symbols
+                                )
+                                print(f"✅ Symbols auto-saved for user {st.session_state.user['username']}")
                             
                             # Clear search and hide suggestions
                             st.session_state.search_query = ""

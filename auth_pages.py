@@ -1,5 +1,6 @@
 import streamlit as st
 from database_postgres import Database
+from session_manager import SessionManager
 
 def render_login_page():
     """Render login page with remember me"""
@@ -48,10 +49,25 @@ def render_login_page():
                             st.session_state.user = user
                             st.session_state.session_token = session_token
                             
+                            # Save to cookie
+                            session_mgr = SessionManager()
+                            session_mgr.save_session(
+                                session_token, 
+                                remember_days=30 if remember_me else 0
+                            )
+                            
                             # Load user's symbols
                             symbols = db.get_user_symbols(user['id'])
                             if symbols:
                                 st.session_state.SYMBOLS = symbols
+                            else:
+                                # Initialize default symbols if none exist
+                                default_symbols = [
+                                    "ETHUSDT", "BTCUSDT", "PAXGUSDT", "BNBUSDT", "SOLUSDT",
+                                    "LINKUSDT", "PEPEUSDT", "XRPUSDT", "DOGEUSDT", "KAITOUSDT", "ADAUSDT"
+                                ]
+                                st.session_state.SYMBOLS = default_symbols
+                                db.save_user_symbols(user['id'], default_symbols)
                             
                             st.success(f"✅ Welcome back, {user['username']}!")
                             st.balloons()
@@ -136,20 +152,9 @@ def render_signup_page():
 def render_user_menu():
     """Render user menu with auto-login check"""
     
-    # Check for existing session on page load
-    if not st.session_state.get('authenticated', False):
-        if 'session_token' in st.session_state:
-            db = Database()
-            user = db.validate_session(st.session_state.session_token)
-            
-            if user:
-                st.session_state.authenticated = True
-                st.session_state.user = user
-                
-                # Load user's symbols
-                symbols = db.get_user_symbols(user['id'])
-                if symbols:
-                    st.session_state.SYMBOLS = symbols
+    # Auto-login from cookie
+    session_mgr = SessionManager()
+    session_mgr.auto_login()
     
     # Render user menu
     if st.session_state.get('authenticated', False):
@@ -169,14 +174,17 @@ def render_user_menu():
                 db = Database()
                 
                 # Save symbols before logout
-                db.save_user_symbols(user['id'], st.session_state.SYMBOLS)
+                if 'SYMBOLS' in st.session_state:
+                    db.save_user_symbols(user['id'], st.session_state.SYMBOLS)
                 
-                # Delete session
+                # Delete session from database
                 if 'session_token' in st.session_state:
                     db.delete_session(st.session_state.session_token)
-                    del st.session_state.session_token
                 
-                # Clear session
+                # Clear cookie
+                session_mgr.clear_session()
+                
+                # Clear session state
                 st.session_state.authenticated = False
                 st.session_state.user = None
                 
