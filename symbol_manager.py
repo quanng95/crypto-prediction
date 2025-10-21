@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 from typing import List, Dict
+from datetime import datetime
 
 class SymbolManager:
     """Simple symbol manager with search"""
@@ -51,7 +52,7 @@ class SymbolManager:
 
 def render_simple_add_symbol(current_symbols: List[str]) -> List[str]:
     """
-    Simple symbol add interface with database persistence
+    Simple symbol add interface with FORCED database persistence
     Returns updated symbol list
     """
     
@@ -104,46 +105,49 @@ def render_simple_add_symbol(current_symbols: List[str]) -> List[str]:
                             # Add to current symbols
                             updated_symbols = current_symbols + [symbol]
                             
-                            # ✅ SAVE TO DATABASE IMMEDIATELY if authenticated
+                            # ✅ FORCE SAVE TO DATABASE if authenticated
                             if st.session_state.get('authenticated', False):
                                 from database import Database
                                 db = Database()
                                 
-                                # Save to database
-                                success = db.save_user_symbols(
-                                    st.session_state.user['id'], 
-                                    updated_symbols
-                                )
-                                
-                                if success:
-                                    # Update session state
-                                    st.session_state.SYMBOLS = updated_symbols
+                                # Try to save 3 times
+                                for attempt in range(3):
+                                    success = db.save_user_symbols(
+                                        st.session_state.user['id'], 
+                                        updated_symbols
+                                    )
                                     
-                                    # Clear search and hide suggestions
-                                    st.session_state.search_query = ""
-                                    st.session_state.show_suggestions = False
-                                    
-                                    st.success(f"✅ Added {symbol} and saved to database!")
-                                    
-                                    # Verify save was successful by reading back
-                                    saved_symbols = db.get_user_symbols(st.session_state.user['id'])
-                                    if symbol in saved_symbols:
-                                        print(f"✅ Verified: {symbol} is in database")
+                                    if success:
+                                        # Verify by reading back
+                                        saved_symbols, _ = db.get_symbols_with_timestamp(st.session_state.user['id'])
+                                        
+                                        if symbol in saved_symbols:
+                                            print(f"✅ Attempt {attempt + 1}: {symbol} verified in database")
+                                            
+                                            # Update session state
+                                            st.session_state.SYMBOLS = updated_symbols
+                                            st.session_state.symbols_timestamp = datetime.now().isoformat()
+                                            
+                                            # Clear search
+                                            st.session_state.search_query = ""
+                                            st.session_state.show_suggestions = False
+                                            
+                                            st.success(f"✅ Added {symbol}!")
+                                            return updated_symbols
+                                        else:
+                                            print(f"⚠️ Attempt {attempt + 1}: {symbol} not found in database, retrying...")
+                                            time.sleep(0.1)
                                     else:
-                                        st.error(f"⚠️ Warning: {symbol} may not be saved properly!")
-                                    
-                                    return updated_symbols
-                                else:
-                                    st.error(f"❌ Failed to save {symbol} to database!")
-                                    return current_symbols
-                            else:
-                                # Not authenticated, just add to session
-                                st.session_state.SYMBOLS = updated_symbols
+                                        print(f"❌ Attempt {attempt + 1}: Failed to save")
+                                        time.sleep(0.1)
                                 
-                                # Clear search and hide suggestions
+                                st.error(f"❌ Failed to save {symbol} after 3 attempts!")
+                                return current_symbols
+                            else:
+                                # Not authenticated
+                                st.session_state.SYMBOLS = updated_symbols
                                 st.session_state.search_query = ""
                                 st.session_state.show_suggestions = False
-                                
                                 st.success(f"✅ Added {symbol}!")
                                 return updated_symbols
                     else:

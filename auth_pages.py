@@ -1,6 +1,5 @@
 import streamlit as st
 from database import Database
-from session_manager import SessionManager
 
 def render_login_page():
     """Render login page"""
@@ -21,7 +20,6 @@ def render_login_page():
         with st.form("login_form"):
             username = st.text_input("Username", placeholder="Enter your username")
             password = st.text_input("Password", type="password", placeholder="Enter your password")
-            remember_me = st.checkbox("Remember me for 30 days", value=True)
             
             col_btn1, col_btn2 = st.columns(2)
             
@@ -39,13 +37,8 @@ def render_login_page():
                     user = db.authenticate_user(username, password)
                     
                     if user:
-                        # Save to session state
                         st.session_state.authenticated = True
                         st.session_state.user = user
-                        
-                        # Save to file
-                        session_manager = SessionManager()
-                        session_manager.save_session(user, remember_me)
                         
                         # Load user's symbols
                         symbols = db.get_user_symbols(user['id'])
@@ -152,13 +145,9 @@ def render_user_menu():
                 db = Database()
                 db.save_user_symbols(user['id'], st.session_state.SYMBOLS)
                 
-                # Clear session state
+                # Clear session
                 st.session_state.authenticated = False
                 st.session_state.user = None
-                
-                # Clear session file
-                session_manager = SessionManager()
-                session_manager.clear_session()
                 
                 # Reset to default symbols
                 st.session_state.SYMBOLS = [

@@ -5,14 +5,7 @@ import requests
 from datetime import datetime
 import atexit
 
-# Page config MUST BE FIRST
-st.set_page_config(
-    page_title="🔮 Crypto Prediction",
-    page_icon="🔮",
-    layout="wide"
-)
-
-# Import các module AFTER set_page_config
+# Import các module
 from websocket_handler import BinanceWebSocket
 from eth import AdvancedETHPredictor
 from chart_component import render_tradingview_chart
@@ -22,7 +15,13 @@ from symbol_manager import render_simple_add_symbol
 from auth_pages import render_login_page, render_signup_page, render_user_menu
 from database import Database
 from admin_panel import render_admin_login, render_admin_panel
-from session_manager import SessionManager
+
+# Page config
+st.set_page_config(
+    page_title="🔮 Crypto Prediction",
+    page_icon="🔮",
+    layout="wide"
+)
 
 # Apply custom CSS
 st.markdown(get_custom_css(), unsafe_allow_html=True)
@@ -39,43 +38,6 @@ if 'user' not in st.session_state:
 
 if 'admin_authenticated' not in st.session_state:
     st.session_state.admin_authenticated = False
-
-# Initialize SYMBOLS first (before auto-login)
-if 'SYMBOLS' not in st.session_state:
-    st.session_state.SYMBOLS = [
-        "ETHUSDT", "BTCUSDT", "PAXGUSDT", "BNBUSDT", "SOLUSDT",
-        "LINKUSDT", "PEPEUSDT", "XRPUSDT", "DOGEUSDT", "KAITOUSDT", "ADAUSDT"
-    ]
-
-# AUTO-LOGIN FROM FILE
-if not st.session_state.authenticated:
-    try:
-        session_manager = SessionManager()
-        session_data = session_manager.load_session()
-        
-        if session_data:
-            # Restore user session
-            st.session_state.authenticated = True
-            st.session_state.user = {
-                'id': session_data['user_id'],
-                'username': session_data['username'],
-                'email': session_data['email']
-            }
-            
-            # ✅ CHỈ LOAD SYMBOLS NẾU SESSION STATE CHƯA CÓ HOẶC RỖNG
-            # Điều này tránh ghi đè symbols vừa được thêm
-            if 'SYMBOLS' not in st.session_state or len(st.session_state.SYMBOLS) == 0:
-                db = Database()
-                symbols = db.get_user_symbols(session_data['user_id'])
-                if symbols:
-                    st.session_state.SYMBOLS = symbols
-                    print(f"✅ Loaded {len(symbols)} symbols from database")
-            else:
-                print(f"ℹ️ Using existing {len(st.session_state.SYMBOLS)} symbols from session")
-            
-            print(f"✅ Auto-login: {session_data['username']}")
-    except Exception as e:
-        print(f"Auto-login error: {e}")
 
 # Admin panel routing
 if st.session_state.page == "admin":
@@ -95,6 +57,22 @@ if st.session_state.page == "signup":
     st.stop()
 
 # HOME PAGE - Continue with normal app
+# Initialize default symbols in session state
+if 'SYMBOLS' not in st.session_state:
+    if st.session_state.authenticated:
+        # Load user's symbols
+        db = Database()
+        symbols = db.get_user_symbols(st.session_state.user['id'])
+        st.session_state.SYMBOLS = symbols if symbols else [
+            "ETHUSDT", "BTCUSDT", "PAXGUSDT", "BNBUSDT", "SOLUSDT",
+            "LINKUSDT", "PEPEUSDT", "XRPUSDT", "DOGEUSDT", "KAITOUSDT", "ADAUSDT"
+        ]
+    else:
+        st.session_state.SYMBOLS = [
+            "ETHUSDT", "BTCUSDT", "PAXGUSDT", "BNBUSDT", "SOLUSDT",
+            "LINKUSDT", "PEPEUSDT", "XRPUSDT", "DOGEUSDT", "KAITOUSDT", "ADAUSDT"
+        ]
+
 SYMBOLS = st.session_state.SYMBOLS
 
 # Initialize session state
@@ -223,33 +201,23 @@ st.markdown("""
 # ============================================
 st.markdown("---")
 
-# Get updated symbols from render function
 updated_symbols = render_simple_add_symbol(st.session_state.SYMBOLS)
 
-# Check if symbols changed
 if updated_symbols != st.session_state.SYMBOLS:
     st.session_state.SYMBOLS = updated_symbols
     SYMBOLS = updated_symbols
     
-    # ✅ DOUBLE-CHECK: Verify save to database if authenticated
+    # Save to database if authenticated
     if st.session_state.authenticated:
         db = Database()
-        
-        # Read back from database to confirm
-        saved_symbols = db.get_user_symbols(st.session_state.user['id'])
-        
-        if saved_symbols != updated_symbols:
-            # Mismatch detected, try to save again
-            print("⚠️ Symbol mismatch detected, saving again...")
-            db.save_user_symbols(st.session_state.user['id'], updated_symbols)
+        db.save_user_symbols(st.session_state.user['id'], SYMBOLS)
     
-    # Restart WebSocket with new symbols
+    # Restart WebSocket
     st.session_state.ws_handler.stop()
     st.session_state.ws_handler = BinanceWebSocket()
     st.session_state.ws_handler.start(SYMBOLS)
     st.session_state.ws_symbols = SYMBOLS.copy()
     
-    print(f"✅ Symbols updated: {SYMBOLS}")
     st.rerun()
 
 # ============================================
@@ -262,26 +230,16 @@ def ticker_carousel():
     
     visible_count = 4
     total_symbols = len(SYMBOLS)
-    
-    if total_symbols == 0:
-        st.warning("⚠️ No symbols in watchlist. Please add some symbols.")
-        return
-    
     start_idx = st.session_state.ticker_start_index
-    
-    # Adjust start_idx if it's out of bounds
-    if start_idx >= total_symbols:
-        st.session_state.ticker_start_index = 0
-        start_idx = 0
     
     nav_col1, *ticker_cols, nav_col2 = st.columns([1, 2, 2, 2, 2, 1])
     
     with nav_col1:
         if st.button("◀", key="prev_btn", help="Previous symbols"):
             if st.session_state.ticker_start_index == 0:
-                st.session_state.ticker_start_index = max(0, total_symbols - visible_count)
+                st.session_state.ticker_start_index = total_symbols - visible_count
             else:
-                st.session_state.ticker_start_index = max(0, st.session_state.ticker_start_index - visible_count)
+                st.session_state.ticker_start_index -= visible_count
             st.rerun()
     
     for idx, col in enumerate(ticker_cols):
