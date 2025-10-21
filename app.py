@@ -14,6 +14,7 @@ from tabs_content import render_all_tabs
 from symbol_manager import render_simple_add_symbol
 from auth_pages import render_login_page, render_signup_page, render_user_menu
 from database import Database
+from admin_panel import render_admin_login, render_admin_panel
 
 # Page config
 st.set_page_config(
@@ -34,6 +35,17 @@ if 'authenticated' not in st.session_state:
 
 if 'user' not in st.session_state:
     st.session_state.user = None
+
+if 'admin_authenticated' not in st.session_state:
+    st.session_state.admin_authenticated = False
+
+# Admin panel routing
+if st.session_state.page == "admin":
+    if not st.session_state.admin_authenticated:
+        render_admin_login()
+    else:
+        render_admin_panel()
+    st.stop()
 
 # Handle page routing
 if st.session_state.page == "login":
@@ -209,7 +221,7 @@ if updated_symbols != st.session_state.SYMBOLS:
     st.rerun()
 
 # ============================================
-# TICKER CAROUSEL WITH REMOVE BUTTON
+# TICKER CAROUSEL WITH REMOVE BUTTON (8-2 ratio)
 # ============================================
 @st.fragment(run_every="0.5s")
 def ticker_carousel():
@@ -244,25 +256,26 @@ def ticker_carousel():
                     price = ticker_data['price']
                     formatted_price = format_price(price)
                     
-                    # Ticker card with hover effect
+                    # Ticker card
                     st.markdown(f"""
-                    <div id="ticker_{symbol}" style="background-color: #2d2d2d; padding: 15px; border-radius: 8px; border: 1px solid #3d3d3d; text-align: center; position: relative;">
+                    <div style="background-color: #2d2d2d; padding: 15px; border-radius: 8px; border: 1px solid #3d3d3d; text-align: center;">
                         <div style="color: #ffffff; font-weight: bold; font-size: 16px; margin-bottom: 8px;">{symbol}</div>
                         <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-weight: bold; font-size: 24px; margin-bottom: 5px;">{formatted_price}</div>
                         <div style="color: {'#27ae60' if is_up else '#e74c3c'}; font-size: 14px;">{'▲' if is_up else '▼'} {abs(change_pct):.2f}%</div>
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    col_chart, col_remove = st.columns([1, 1])
+                    # Buttons with 8-2 ratio (Chart button wider, Remove button smaller)
+                    col_chart, col_remove = st.columns([8, 2])
                     
                     with col_chart:
-                        if st.button("📊", key=f"chart_{symbol}", use_container_width=True, type="secondary", help="View chart"):
+                        if st.button("📊 Chart", key=f"chart_{symbol}", use_container_width=True, type="secondary"):
                             st.session_state.show_chart = True
                             st.session_state.chart_symbol = symbol
                             st.rerun()
                     
                     with col_remove:
-                        if st.button("❌", key=f"remove_{symbol}", use_container_width=True, type="secondary", help="Remove symbol"):
+                        if st.button("❌", key=f"remove_{symbol}", use_container_width=True, type="secondary", help=f"Remove {symbol}"):
                             if len(SYMBOLS) > 1:  # Keep at least 1 symbol
                                 st.session_state.SYMBOLS.remove(symbol)
                                 
@@ -444,15 +457,24 @@ if st.session_state.predictor is not None and st.session_state.predictions is no
     
     render_all_tabs(predictor, all_predictions)
 
-# Footer
+# Footer with Admin button
 st.markdown("---")
-st.markdown(
-    f"<div style='text-align: center; color: #7f8c8d; font-size: 14px;'>"
-    f"🔮 Crypto Prediction | Last update: {datetime.now().strftime('%H:%M:%S')} | "
-    f"Powered by Streamlit & Binance WebSocket"
-    f"</div>",
-    unsafe_allow_html=True
-)
+
+col1, col2, col3 = st.columns([1, 6, 1])
+
+with col1:
+    if st.button("👨‍💼 Admin", key="admin_btn"):
+        st.session_state.page = "admin"
+        st.rerun()
+
+with col2:
+    st.markdown(
+        f"<div style='text-align: center; color: #7f8c8d; font-size: 14px;'>"
+        f"🔮 Crypto Prediction | Last update: {datetime.now().strftime('%H:%M:%S')} | "
+        f"Powered by Streamlit & Binance WebSocket"
+        f"</div>",
+        unsafe_allow_html=True
+    )
 
 # Cleanup WebSocket on app close
 def cleanup():
