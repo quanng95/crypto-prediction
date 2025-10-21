@@ -5,9 +5,6 @@ import requests
 from datetime import datetime
 import atexit
 
-# Import session manager TRƯỚC để check cookies
-from session_manager import SessionManager
-
 # ============================================
 # PHẢI GỌI set_page_config TRƯỚC MỌI THỨ
 # ============================================
@@ -17,7 +14,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Import các module còn lại
+# Import các module SAU set_page_config
 from websocket_handler import BinanceWebSocket
 from eth import AdvancedETHPredictor
 from chart_component import render_tradingview_chart
@@ -27,12 +24,13 @@ from symbol_manager import render_simple_add_symbol
 from auth_pages import render_login_page, render_signup_page, render_user_menu
 from database_postgres import Database
 from admin_panel import render_admin_login, render_admin_panel
+from session_manager import SessionManager
 
 # Apply custom CSS
 st.markdown(get_custom_css(), unsafe_allow_html=True)
 
 # ============================================
-# AUTO-LOGIN CHECK (SAU khi set_page_config)
+# AUTO-LOGIN CHECK
 # ============================================
 SessionManager.auto_login()
 

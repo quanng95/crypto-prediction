@@ -1,34 +1,19 @@
 import streamlit as st
-from streamlit_cookies_manager import EncryptedCookieManager
 from database_postgres import Database
-import os
+import secrets
 
 class SessionManager:
     
     @staticmethod
-    def get_cookie_manager():
-        """Get cookie manager instance"""
-        # Secret key for encryption (nên lưu trong env variable)
-        cookies = EncryptedCookieManager(
-            prefix="crypto_app_",
-            password=os.getenv("COOKIE_PASSWORD", "your-secret-key-change-this-to-random-string")
-        )
-        
-        # QUAN TRỌNG: Không gọi st.stop() ở đây
-        # Chỉ return cookies, check ready() ở nơi gọi
-        return cookies
-    
-    @staticmethod
     def save_session(session_token: str):
-        """Save session token to cookies"""
+        """Save session token to query params"""
         try:
-            cookies = SessionManager.get_cookie_manager()
+            # Lưu vào session_state (persist trong session)
+            st.session_state.session_token = session_token
             
-            if not cookies.ready():
-                return False
+            # Lưu vào query params (persist qua F5)
+            st.query_params["token"] = session_token
             
-            cookies['session_token'] = session_token
-            cookies.save()
             return True
         except Exception as e:
             print(f"Error saving session: {e}")
@@ -36,30 +21,37 @@ class SessionManager:
     
     @staticmethod
     def get_session():
-        """Get session token from cookies"""
+        """Get session token from query params or session_state"""
         try:
-            cookies = SessionManager.get_cookie_manager()
+            # Ưu tiên lấy từ session_state (nhanh hơn)
+            if 'session_token' in st.session_state:
+                return st.session_state.session_token
             
-            if not cookies.ready():
-                return None
+            # Nếu không có, lấy từ query params (sau khi F5)
+            token = st.query_params.get("token")
             
-            return cookies.get('session_token')
+            if token:
+                # Restore vào session_state
+                st.session_state.session_token = token
+                return token
+            
+            return None
         except Exception as e:
             print(f"Error getting session: {e}")
             return None
     
     @staticmethod
     def clear_session():
-        """Clear session from cookies"""
+        """Clear session from query params and session_state"""
         try:
-            cookies = SessionManager.get_cookie_manager()
+            # Xóa khỏi session_state
+            if 'session_token' in st.session_state:
+                del st.session_state.session_token
             
-            if not cookies.ready():
-                return False
+            # Xóa khỏi query params
+            if "token" in st.query_params:
+                del st.query_params["token"]
             
-            if 'session_token' in cookies:
-                del cookies['session_token']
-                cookies.save()
             return True
         except Exception as e:
             print(f"Error clearing session: {e}")
@@ -67,12 +59,12 @@ class SessionManager:
     
     @staticmethod
     def auto_login():
-        """Auto login from cookies - KHÔNG GỌI STREAMLIT COMMANDS"""
+        """Auto login from session token"""
         # Skip if already authenticated
         if st.session_state.get('authenticated', False):
             return True
         
-        # Try to get token from cookies
+        # Try to get token
         session_token = SessionManager.get_session()
         
         if session_token:
@@ -80,7 +72,7 @@ class SessionManager:
             user = db.validate_session(session_token)
             
             if user:
-                # Restore session (chỉ set session_state, không gọi st commands)
+                # Restore session
                 st.session_state.authenticated = True
                 st.session_state.user = user
                 st.session_state.session_token = session_token
