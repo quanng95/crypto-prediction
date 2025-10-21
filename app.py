@@ -11,6 +11,7 @@ from eth import AdvancedETHPredictor
 from chart_component import render_tradingview_chart
 from custom_css import get_custom_css
 from tabs_content import render_all_tabs
+from symbol_manager import render_simple_add_symbol  # NEW - Simple version
 
 # Page config
 st.set_page_config(
@@ -22,8 +23,14 @@ st.set_page_config(
 # Apply custom CSS
 st.markdown(get_custom_css(), unsafe_allow_html=True)
 
-# Symbols
-SYMBOLS = ["ETHUSDT", "BTCUSDT", "PAXGUSDT", "BNBUSDT", "SOLUSDT", "LINKUSDT", "PEPEUSDT", "XRPUSDT", "DOGEUSDT", "KAITOUSDT", "ADAUSDT"]
+# Initialize default symbols in session state
+if 'SYMBOLS' not in st.session_state:
+    st.session_state.SYMBOLS = [
+        "ETHUSDT", "BTCUSDT", "PAXGUSDT", "BNBUSDT", "SOLUSDT", 
+        "LINKUSDT", "PEPEUSDT", "XRPUSDT", "DOGEUSDT", "KAITOUSDT", "ADAUSDT"
+    ]
+
+SYMBOLS = st.session_state.SYMBOLS
 
 # Initialize session state
 if 'show_chart' not in st.session_state:
@@ -54,6 +61,11 @@ if 'ws_handler' not in st.session_state:
     st.session_state.ws_handler = BinanceWebSocket()
     st.session_state.ws_handler.start(SYMBOLS)
     print("🚀 WebSocket initialized")
+elif st.session_state.ws_handler.symbols != SYMBOLS:
+    st.session_state.ws_handler.stop()
+    st.session_state.ws_handler = BinanceWebSocket()
+    st.session_state.ws_handler.start(SYMBOLS)
+    print("🔄 WebSocket restarted")
 
 @st.cache_data(ttl=5)
 def get_ticker(symbol):
@@ -131,6 +143,24 @@ st.markdown("""
     <h1 class="header-title">🔮 Crypto Prediction</h1>
 </div>
 """, unsafe_allow_html=True)
+
+# ============================================
+# SIMPLE ADD SYMBOL (NEW - Đơn giản)
+# ============================================
+st.markdown("---")
+
+updated_symbols = render_simple_add_symbol(st.session_state.SYMBOLS)
+
+if updated_symbols != st.session_state.SYMBOLS:
+    st.session_state.SYMBOLS = updated_symbols
+    SYMBOLS = updated_symbols
+    
+    # Restart WebSocket
+    st.session_state.ws_handler.stop()
+    st.session_state.ws_handler = BinanceWebSocket()
+    st.session_state.ws_handler.start(SYMBOLS)
+    
+    st.rerun()
 
 # ============================================
 # TICKER CAROUSEL
@@ -244,7 +274,7 @@ with col1:
     selected_symbol = st.selectbox(
         "📊 Symbol", 
         SYMBOLS, 
-        index=SYMBOLS.index(st.session_state.selected_symbol),
+        index=SYMBOLS.index(st.session_state.selected_symbol) if st.session_state.selected_symbol in SYMBOLS else 0,
         key="symbol_select_main"
     )
     if selected_symbol != st.session_state.selected_symbol:
