@@ -25,7 +25,7 @@ class SymbolManager:
             
             return symbols
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Error fetching Binance symbols: {e}")
             return []
     
     @staticmethod
@@ -51,7 +51,7 @@ class SymbolManager:
 
 def render_simple_add_symbol(current_symbols: List[str]) -> List[str]:
     """
-    Simple symbol add interface
+    Simple symbol add interface with database persistence
     Returns updated symbol list
     """
     
@@ -101,14 +101,53 @@ def render_simple_add_symbol(current_symbols: List[str]) -> List[str]:
                 with col2:
                     if symbol not in current_symbols:
                         if st.button("➕", key=f"add_{symbol}", use_container_width=True):
-                            current_symbols.append(symbol)
+                            # Add to current symbols
+                            updated_symbols = current_symbols + [symbol]
                             
-                            # Clear search and hide suggestions
-                            st.session_state.search_query = ""
-                            st.session_state.show_suggestions = False
-                            
-                            st.success(f"✅ Added {symbol}!")
-                            st.rerun()
+                            # ✅ SAVE TO DATABASE IMMEDIATELY if authenticated
+                            if st.session_state.get('authenticated', False):
+                                from database import Database
+                                db = Database()
+                                
+                                # Save to database
+                                success = db.save_user_symbols(
+                                    st.session_state.user['id'], 
+                                    updated_symbols
+                                )
+                                
+                                if success:
+                                    # Update session state
+                                    st.session_state.SYMBOLS = updated_symbols
+                                    
+                                    # Clear search and hide suggestions
+                                    st.session_state.search_query = ""
+                                    st.session_state.show_suggestions = False
+                                    
+                                    st.success(f"✅ Added {symbol} and saved to database!")
+                                    
+                                    # Verify save was successful by reading back
+                                    saved_symbols = db.get_user_symbols(st.session_state.user['id'])
+                                    if symbol in saved_symbols:
+                                        print(f"✅ Verified: {symbol} is in database")
+                                    else:
+                                        st.error(f"⚠️ Warning: {symbol} may not be saved properly!")
+                                    
+                                    return updated_symbols
+                                else:
+                                    st.error(f"❌ Failed to save {symbol} to database!")
+                                    return current_symbols
+                            else:
+                                # Not authenticated, just add to session
+                                st.session_state.SYMBOLS = updated_symbols
+                                
+                                # Clear search and hide suggestions
+                                st.session_state.search_query = ""
+                                st.session_state.show_suggestions = False
+                                
+                                st.success(f"✅ Added {symbol}!")
+                                return updated_symbols
+                    else:
+                        st.markdown("✓")
         else:
             st.info("No symbols found")
     

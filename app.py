@@ -62,11 +62,16 @@ if not st.session_state.authenticated:
                 'email': session_data['email']
             }
             
-            # Load user's symbols from database
-            db = Database()
-            symbols = db.get_user_symbols(session_data['user_id'])
-            if symbols:
-                st.session_state.SYMBOLS = symbols
+            # ✅ CHỈ LOAD SYMBOLS NẾU SESSION STATE CHƯA CÓ HOẶC RỖNG
+            # Điều này tránh ghi đè symbols vừa được thêm
+            if 'SYMBOLS' not in st.session_state or len(st.session_state.SYMBOLS) == 0:
+                db = Database()
+                symbols = db.get_user_symbols(session_data['user_id'])
+                if symbols:
+                    st.session_state.SYMBOLS = symbols
+                    print(f"✅ Loaded {len(symbols)} symbols from database")
+            else:
+                print(f"ℹ️ Using existing {len(st.session_state.SYMBOLS)} symbols from session")
             
             print(f"✅ Auto-login: {session_data['username']}")
     except Exception as e:
@@ -218,23 +223,33 @@ st.markdown("""
 # ============================================
 st.markdown("---")
 
+# Get updated symbols from render function
 updated_symbols = render_simple_add_symbol(st.session_state.SYMBOLS)
 
+# Check if symbols changed
 if updated_symbols != st.session_state.SYMBOLS:
     st.session_state.SYMBOLS = updated_symbols
     SYMBOLS = updated_symbols
     
-    # Save to database if authenticated
+    # ✅ DOUBLE-CHECK: Verify save to database if authenticated
     if st.session_state.authenticated:
         db = Database()
-        db.save_user_symbols(st.session_state.user['id'], SYMBOLS)
+        
+        # Read back from database to confirm
+        saved_symbols = db.get_user_symbols(st.session_state.user['id'])
+        
+        if saved_symbols != updated_symbols:
+            # Mismatch detected, try to save again
+            print("⚠️ Symbol mismatch detected, saving again...")
+            db.save_user_symbols(st.session_state.user['id'], updated_symbols)
     
-    # Restart WebSocket
+    # Restart WebSocket with new symbols
     st.session_state.ws_handler.stop()
     st.session_state.ws_handler = BinanceWebSocket()
     st.session_state.ws_handler.start(SYMBOLS)
     st.session_state.ws_symbols = SYMBOLS.copy()
     
+    print(f"✅ Symbols updated: {SYMBOLS}")
     st.rerun()
 
 # ============================================
