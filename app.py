@@ -5,7 +5,14 @@ import requests
 from datetime import datetime
 import atexit
 
-# Import các module
+# Page config MUST BE FIRST
+st.set_page_config(
+    page_title="🔮 Crypto Prediction",
+    page_icon="🔮",
+    layout="wide"
+)
+
+# Import các module AFTER set_page_config
 from websocket_handler import BinanceWebSocket
 from eth import AdvancedETHPredictor
 from chart_component import render_tradingview_chart
@@ -15,14 +22,7 @@ from symbol_manager import render_simple_add_symbol
 from auth_pages import render_login_page, render_signup_page, render_user_menu
 from database import Database
 from admin_panel import render_admin_login, render_admin_panel
-from session_manager import SessionManager  # NEW
-
-# Page config
-st.set_page_config(
-    page_title="🔮 Crypto Prediction",
-    page_icon="🔮",
-    layout="wide"
-)
+from session_manager import SessionManager
 
 # Apply custom CSS
 st.markdown(get_custom_css(), unsafe_allow_html=True)
@@ -40,7 +40,7 @@ if 'user' not in st.session_state:
 if 'admin_authenticated' not in st.session_state:
     st.session_state.admin_authenticated = False
 
-# AUTO-LOGIN FROM COOKIES (NEW)
+# AUTO-LOGIN FROM FILE
 if not st.session_state.authenticated:
     try:
         session_manager = SessionManager()
@@ -291,7 +291,7 @@ def ticker_carousel():
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # Buttons with 8-2 ratio (Chart button wider, Remove button smaller)
+                    # Buttons with 8-2 ratio
                     col_chart, col_remove = st.columns([8, 2])
                     
                     with col_chart:
@@ -302,10 +302,9 @@ def ticker_carousel():
                     
                     with col_remove:
                         if st.button("❌", key=f"remove_{symbol}", use_container_width=True, type="secondary", help=f"Remove {symbol}"):
-                            if len(SYMBOLS) > 1:  # Keep at least 1 symbol
+                            if len(SYMBOLS) > 1:
                                 st.session_state.SYMBOLS.remove(symbol)
                                 
-                                # Save to database if authenticated
                                 if st.session_state.authenticated:
                                     db = Database()
                                     db.save_user_symbols(st.session_state.user['id'], st.session_state.SYMBOLS)

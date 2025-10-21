@@ -21,7 +21,7 @@ def render_login_page():
         with st.form("login_form"):
             username = st.text_input("Username", placeholder="Enter your username")
             password = st.text_input("Password", type="password", placeholder="Enter your password")
-            remember_me = st.checkbox("Remember me for 30 days", value=True)  # NEW
+            remember_me = st.checkbox("Remember me for 30 days", value=True)
             
             col_btn1, col_btn2 = st.columns(2)
             
@@ -43,7 +43,7 @@ def render_login_page():
                         st.session_state.authenticated = True
                         st.session_state.user = user
                         
-                        # Save to cookies (NEW)
+                        # Save to file
                         session_manager = SessionManager()
                         session_manager.save_session(user, remember_me)
                         
@@ -156,7 +156,7 @@ def render_user_menu():
                 st.session_state.authenticated = False
                 st.session_state.user = None
                 
-                # Clear cookies (NEW)
+                # Clear session file
                 session_manager = SessionManager()
                 session_manager.clear_session()
                 
