@@ -1,8 +1,8 @@
 import streamlit as st
-from database import Database
+from database_postgres import Database
 
 def render_login_page():
-    """Render login page"""
+    """Render login page with remember me"""
     st.markdown("""
     <div class="header-container">
         <h1 class="header-title">🔐 Sign In</h1>
@@ -11,7 +11,6 @@ def render_login_page():
     
     st.markdown("---")
     
-    # Center the form
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
@@ -20,6 +19,9 @@ def render_login_page():
         with st.form("login_form"):
             username = st.text_input("Username", placeholder="Enter your username")
             password = st.text_input("Password", type="password", placeholder="Enter your password")
+            
+            # Remember me checkbox
+            remember_me = st.checkbox("🔒 Remember me for 30 days", value=True)
             
             col_btn1, col_btn2 = st.columns(2)
             
@@ -37,20 +39,27 @@ def render_login_page():
                     user = db.authenticate_user(username, password)
                     
                     if user:
-                        st.session_state.authenticated = True
-                        st.session_state.user = user
+                        # Create session token
+                        session_token = db.create_session(user['id'], remember_me)
                         
-                        # Load user's symbols
-                        symbols = db.get_user_symbols(user['id'])
-                        if symbols:
-                            st.session_state.SYMBOLS = symbols
-                        
-                        st.success(f"✅ Welcome back, {user['username']}!")
-                        st.balloons()
-                        
-                        # Redirect to home
-                        st.session_state.page = "home"
-                        st.rerun()
+                        if session_token:
+                            # Save to session state
+                            st.session_state.authenticated = True
+                            st.session_state.user = user
+                            st.session_state.session_token = session_token
+                            
+                            # Load user's symbols
+                            symbols = db.get_user_symbols(user['id'])
+                            if symbols:
+                                st.session_state.SYMBOLS = symbols
+                            
+                            st.success(f"✅ Welcome back, {user['username']}!")
+                            st.balloons()
+                            
+                            st.session_state.page = "home"
+                            st.rerun()
+                        else:
+                            st.error("❌ Error creating session")
                     else:
                         st.error("❌ Invalid username or password")
             
@@ -58,75 +67,25 @@ def render_login_page():
                 st.session_state.page = "signup"
                 st.rerun()
 
-def render_signup_page():
-    """Render signup page"""
-    st.markdown("""
-    <div class="header-container">
-        <h1 class="header-title">📝 Sign Up</h1>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # Center the form
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col2:
-        st.markdown("### Create Your Account")
-        
-        with st.form("signup_form"):
-            username = st.text_input("Username", placeholder="Choose a username")
-            email = st.text_input("Email", placeholder="Enter your email")
-            password = st.text_input("Password", type="password", placeholder="Choose a strong password")
-            confirm_password = st.text_input("Confirm Password", type="password", placeholder="Confirm your password")
-            
-            st.markdown("""
-            <div style="background-color: #2d2d2d; padding: 15px; border-radius: 8px; margin: 10px 0;">
-                <p style="margin: 0; font-size: 14px;"><b>Password Requirements:</b></p>
-                <ul style="margin: 5px 0; font-size: 13px;">
-                    <li>At least 8 characters long</li>
-                    <li>Contains uppercase letter (A-Z)</li>
-                    <li>Contains lowercase letter (a-z)</li>
-                    <li>Contains number (0-9)</li>
-                    <li>Contains special character (!@#$%^&*...)</li>
-                </ul>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            col_btn1, col_btn2 = st.columns(2)
-            
-            with col_btn1:
-                submit = st.form_submit_button("✨ Create Account", use_container_width=True, type="primary")
-            
-            with col_btn2:
-                login_redirect = st.form_submit_button("🔐 Sign In", use_container_width=True)
-            
-            if submit:
-                if not username or not email or not password or not confirm_password:
-                    st.error("❌ Please fill in all fields")
-                elif password != confirm_password:
-                    st.error("❌ Passwords do not match")
-                else:
-                    db = Database()
-                    success, message = db.create_user(username, email, password)
-                    
-                    if success:
-                        st.success(f"✅ {message}")
-                        st.info("🔐 Please sign in with your new account")
-                        st.balloons()
-                        
-                        # Redirect to login
-                        st.session_state.page = "login"
-                        st.rerun()
-                    else:
-                        st.error(f"❌ {message}")
-            
-            if login_redirect:
-                st.session_state.page = "login"
-                st.rerun()
-
 def render_user_menu():
-    """Render user menu in top right corner"""
+    """Render user menu with auto-login check"""
+    
+    # Check for existing session on page load
+    if not st.session_state.get('authenticated', False):
+        if 'session_token' in st.session_state:
+            db = Database()
+            user = db.validate_session(st.session_state.session_token)
+            
+            if user:
+                st.session_state.authenticated = True
+                st.session_state.user = user
+                
+                # Load user's symbols
+                symbols = db.get_user_symbols(user['id'])
+                if symbols:
+                    st.session_state.SYMBOLS = symbols
+    
+    # Rest of the user menu code...
     if st.session_state.get('authenticated', False):
         user = st.session_state.user
         
@@ -141,9 +100,15 @@ def render_user_menu():
         
         with col3:
             if st.button("🚪 Logout", type="secondary", use_container_width=True):
-                # Save symbols before logout
                 db = Database()
+                
+                # Save symbols before logout
                 db.save_user_symbols(user['id'], st.session_state.SYMBOLS)
+                
+                # Delete session
+                if 'session_token' in st.session_state:
+                    db.delete_session(st.session_state.session_token)
+                    del st.session_state.session_token
                 
                 # Clear session
                 st.session_state.authenticated = False

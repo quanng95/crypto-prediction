@@ -13,7 +13,7 @@ from custom_css import get_custom_css
 from tabs_content import render_all_tabs
 from symbol_manager import render_simple_add_symbol
 from auth_pages import render_login_page, render_signup_page, render_user_menu
-from database import Database
+from database_postgres import Database
 from admin_panel import render_admin_login, render_admin_panel
 
 # Page config

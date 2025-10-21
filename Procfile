@@ -1,1 +1,0 @@
-web: streamlit run app_test.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true

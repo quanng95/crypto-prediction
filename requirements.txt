@@ -11,3 +11,4 @@ matplotlib==3.9.2
 websocket-client
 streamlit-autorefresh
 streamlit_cookies_manager
+psycopg2-binary
