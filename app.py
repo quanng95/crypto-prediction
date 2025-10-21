@@ -11,7 +11,7 @@ from eth import AdvancedETHPredictor
 from chart_component import render_tradingview_chart
 from custom_css import get_custom_css
 from tabs_content import render_all_tabs
-from symbol_manager import render_simple_add_symbol  # NEW - Simple version
+from symbol_manager import render_simple_add_symbol  # Simple version of symbol manager
 
 # Page config
 st.set_page_config(
@@ -60,11 +60,14 @@ if 'chart_data_cache' not in st.session_state:
 if 'ws_handler' not in st.session_state:
     st.session_state.ws_handler = BinanceWebSocket()
     st.session_state.ws_handler.start(SYMBOLS)
+    st.session_state.ws_symbols = SYMBOLS.copy()  # Track current symbols
     print("🚀 WebSocket initialized")
-elif st.session_state.ws_handler.symbols != SYMBOLS:
+elif st.session_state.ws_symbols != SYMBOLS:
+    # Restart WebSocket if symbols changed
     st.session_state.ws_handler.stop()
     st.session_state.ws_handler = BinanceWebSocket()
     st.session_state.ws_handler.start(SYMBOLS)
+    st.session_state.ws_symbols = SYMBOLS.copy()
     print("🔄 WebSocket restarted")
 
 @st.cache_data(ttl=5)
@@ -159,6 +162,7 @@ if updated_symbols != st.session_state.SYMBOLS:
     st.session_state.ws_handler.stop()
     st.session_state.ws_handler = BinanceWebSocket()
     st.session_state.ws_handler.start(SYMBOLS)
+    st.session_state.ws_symbols = SYMBOLS.copy()  # Update tracked symbols
     
     st.rerun()
 
