@@ -40,6 +40,13 @@ if 'user' not in st.session_state:
 if 'admin_authenticated' not in st.session_state:
     st.session_state.admin_authenticated = False
 
+# Initialize SYMBOLS first (before auto-login)
+if 'SYMBOLS' not in st.session_state:
+    st.session_state.SYMBOLS = [
+        "ETHUSDT", "BTCUSDT", "PAXGUSDT", "BNBUSDT", "SOLUSDT",
+        "LINKUSDT", "PEPEUSDT", "XRPUSDT", "DOGEUSDT", "KAITOUSDT", "ADAUSDT"
+    ]
+
 # AUTO-LOGIN FROM FILE
 if not st.session_state.authenticated:
     try:
@@ -55,7 +62,7 @@ if not st.session_state.authenticated:
                 'email': session_data['email']
             }
             
-            # Load user's symbols
+            # Load user's symbols from database
             db = Database()
             symbols = db.get_user_symbols(session_data['user_id'])
             if symbols:
@@ -83,22 +90,6 @@ if st.session_state.page == "signup":
     st.stop()
 
 # HOME PAGE - Continue with normal app
-# Initialize default symbols in session state
-if 'SYMBOLS' not in st.session_state:
-    if st.session_state.authenticated:
-        # Load user's symbols
-        db = Database()
-        symbols = db.get_user_symbols(st.session_state.user['id'])
-        st.session_state.SYMBOLS = symbols if symbols else [
-            "ETHUSDT", "BTCUSDT", "PAXGUSDT", "BNBUSDT", "SOLUSDT",
-            "LINKUSDT", "PEPEUSDT", "XRPUSDT", "DOGEUSDT", "KAITOUSDT", "ADAUSDT"
-        ]
-    else:
-        st.session_state.SYMBOLS = [
-            "ETHUSDT", "BTCUSDT", "PAXGUSDT", "BNBUSDT", "SOLUSDT",
-            "LINKUSDT", "PEPEUSDT", "XRPUSDT", "DOGEUSDT", "KAITOUSDT", "ADAUSDT"
-        ]
-
 SYMBOLS = st.session_state.SYMBOLS
 
 # Initialize session state
@@ -256,16 +247,26 @@ def ticker_carousel():
     
     visible_count = 4
     total_symbols = len(SYMBOLS)
+    
+    if total_symbols == 0:
+        st.warning("⚠️ No symbols in watchlist. Please add some symbols.")
+        return
+    
     start_idx = st.session_state.ticker_start_index
+    
+    # Adjust start_idx if it's out of bounds
+    if start_idx >= total_symbols:
+        st.session_state.ticker_start_index = 0
+        start_idx = 0
     
     nav_col1, *ticker_cols, nav_col2 = st.columns([1, 2, 2, 2, 2, 1])
     
     with nav_col1:
         if st.button("◀", key="prev_btn", help="Previous symbols"):
             if st.session_state.ticker_start_index == 0:
-                st.session_state.ticker_start_index = total_symbols - visible_count
+                st.session_state.ticker_start_index = max(0, total_symbols - visible_count)
             else:
-                st.session_state.ticker_start_index -= visible_count
+                st.session_state.ticker_start_index = max(0, st.session_state.ticker_start_index - visible_count)
             st.rerun()
     
     for idx, col in enumerate(ticker_cols):
@@ -291,7 +292,7 @@ def ticker_carousel():
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # Buttons with 8-2 ratio
+                    # Buttons with 8-2 ratio (Chart button wider, Remove button smaller)
                     col_chart, col_remove = st.columns([8, 2])
                     
                     with col_chart:
@@ -302,9 +303,10 @@ def ticker_carousel():
                     
                     with col_remove:
                         if st.button("❌", key=f"remove_{symbol}", use_container_width=True, type="secondary", help=f"Remove {symbol}"):
-                            if len(SYMBOLS) > 1:
+                            if len(SYMBOLS) > 1:  # Keep at least 1 symbol
                                 st.session_state.SYMBOLS.remove(symbol)
                                 
+                                # Save to database if authenticated
                                 if st.session_state.authenticated:
                                     db = Database()
                                     db.save_user_symbols(st.session_state.user['id'], st.session_state.SYMBOLS)
