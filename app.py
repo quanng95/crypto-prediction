@@ -15,6 +15,7 @@ from symbol_manager import render_simple_add_symbol
 from auth_pages import render_login_page, render_signup_page, render_user_menu
 from database_postgres import Database
 from admin_panel import render_admin_login, render_admin_panel
+from session_manager import SessionManager
 
 # Page config
 st.set_page_config(
@@ -25,6 +26,11 @@ st.set_page_config(
 
 # Apply custom CSS
 st.markdown(get_custom_css(), unsafe_allow_html=True)
+
+# ============================================
+# AUTO-LOGIN CHECK (CHẠY TRƯỚC MỌI THỨ)
+# ============================================
+SessionManager.auto_login()
 
 # Initialize page state
 if 'page' not in st.session_state:

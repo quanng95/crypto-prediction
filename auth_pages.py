@@ -1,5 +1,6 @@
 import streamlit as st
 from database_postgres import Database
+from session_manager import SessionManager
 
 def render_login_page():
     """Render login page with remember me"""
@@ -43,11 +44,14 @@ def render_login_page():
                         session_token = db.create_session(user['id'], remember_me)
                         
                         if session_token:
-                            # Save to session state (QUAN TRỌNG - persist qua rerun)
+                            # Save to session state
                             st.session_state.authenticated = True
                             st.session_state.user = user
                             st.session_state.session_token = session_token
                             st.session_state.remember_me = remember_me
+                            
+                            # Save to cookies (per-session)
+                            SessionManager.save_session(session_token)
                             
                             # Load user's symbols
                             symbols = db.get_user_symbols(user['id'])
@@ -144,20 +148,8 @@ def render_signup_page():
 def render_user_menu():
     """Render user menu with auto-login"""
     
-    # Auto-login check (chạy mỗi lần load page)
-    if not st.session_state.get('authenticated', False):
-        if 'session_token' in st.session_state and st.session_state.session_token:
-            db = Database()
-            user = db.validate_session(st.session_state.session_token)
-            
-            if user:
-                st.session_state.authenticated = True
-                st.session_state.user = user
-                
-                # Load user's symbols
-                symbols = db.get_user_symbols(user['id'])
-                if symbols:
-                    st.session_state.SYMBOLS = symbols
+    # Auto-login check
+    SessionManager.auto_login()
     
     # Render user menu
     if st.session_state.get('authenticated', False):
@@ -184,6 +176,9 @@ def render_user_menu():
                 if 'session_token' in st.session_state:
                     db.delete_session(st.session_state.session_token)
                     del st.session_state.session_token
+                
+                # Clear from cookies
+                SessionManager.clear_session()
                 
                 # Clear session state
                 st.session_state.authenticated = False
