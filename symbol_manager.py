@@ -62,27 +62,25 @@ def render_simple_add_symbol(current_symbols: List[str]) -> List[str]:
     if 'search_query' not in st.session_state:
         st.session_state.search_query = ""
     
+    if 'show_suggestions' not in st.session_state:
+        st.session_state.show_suggestions = True
+    
     # Search box
-    col1, col2 = st.columns([4, 1])
+    search_query = st.text_input(
+        "🔍 Add Symbol",
+        value=st.session_state.search_query,
+        placeholder="Type symbol (e.g., BTC, ETH, KAI...)",
+        key="search_input",
+        label_visibility="collapsed"
+    )
     
-    with col1:
-        search_query = st.text_input(
-            "🔍 Add Symbol",
-            value=st.session_state.search_query,
-            placeholder="Type symbol (e.g., BTC, ETH, KAI...)",
-            key="search_input",
-            label_visibility="collapsed"
-        )
-    
-    with col2:
-        st.write("")
-        if st.button("🔄", use_container_width=True, help="Refresh symbol list"):
-            st.cache_data.clear()
-            st.session_state.all_binance_symbols = SymbolManager.fetch_all_binance_symbols()
-            st.success("✅ Refreshed!")
+    # Update search query
+    if search_query != st.session_state.search_query:
+        st.session_state.search_query = search_query
+        st.session_state.show_suggestions = True
     
     # Search and show suggestions
-    if search_query and len(search_query) >= 2:
+    if st.session_state.show_suggestions and search_query and len(search_query) >= 2:
         results = SymbolManager.search_symbols(
             search_query, 
             st.session_state.all_binance_symbols
@@ -101,12 +99,14 @@ def render_simple_add_symbol(current_symbols: List[str]) -> List[str]:
                     st.markdown(f"**{symbol}** ({base}/USDT)")
                 
                 with col2:
-                    if symbol in current_symbols:
-                        st.button("✓", key=f"added_{symbol}", disabled=True, use_container_width=True)
-                    else:
+                    if symbol not in current_symbols:
                         if st.button("➕", key=f"add_{symbol}", use_container_width=True):
                             current_symbols.append(symbol)
+                            
+                            # Clear search and hide suggestions
                             st.session_state.search_query = ""
+                            st.session_state.show_suggestions = False
+                            
                             st.success(f"✅ Added {symbol}!")
                             st.rerun()
         else:
