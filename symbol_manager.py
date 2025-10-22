@@ -4,29 +4,47 @@ from typing import List, Dict
 from database_postgres import Database
 
 class SymbolManager:
-    """Simple symbol manager with search"""
+    """Symbol manager with Spot and Future support"""
     
     @staticmethod
     @st.cache_data(ttl=3600)
     def fetch_all_binance_symbols():
-        """Fetch all USDT pairs from Binance"""
+        """Fetch both Spot (USDT) and Future (PERP) symbols"""
+        symbols = []
+        
         try:
-            url = "https://api.binance.com/api/v3/exchangeInfo"
-            response = requests.get(url, timeout=10)
-            data = response.json()
+            # Fetch Spot symbols
+            spot_url = "https://api.binance.com/api/v3/exchangeInfo"
+            spot_response = requests.get(spot_url, timeout=10)
+            spot_data = spot_response.json()
             
-            symbols = []
-            for symbol_info in data['symbols']:
+            for symbol_info in spot_data['symbols']:
                 if (symbol_info['status'] == 'TRADING' and 
                     symbol_info['quoteAsset'] == 'USDT'):
                     symbols.append({
                         'symbol': symbol_info['symbol'],
-                        'baseAsset': symbol_info['baseAsset']
+                        'baseAsset': symbol_info['baseAsset'],
+                        'type': 'SPOT'
+                    })
+            
+            # Fetch Future symbols (PERP)
+            future_url = "https://fapi.binance.com/fapi/v1/exchangeInfo"
+            future_response = requests.get(future_url, timeout=10)
+            future_data = future_response.json()
+            
+            for symbol_info in future_data['symbols']:
+                if (symbol_info['status'] == 'TRADING' and 
+                    symbol_info['contractType'] == 'PERPETUAL'):
+                    symbols.append({
+                        'symbol': symbol_info['symbol'],
+                        'baseAsset': symbol_info['baseAsset'],
+                        'type': 'FUTURE'
                     })
             
             return symbols
+            
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Error fetching symbols: {e}")
             return []
     
     @staticmethod
@@ -45,14 +63,14 @@ class SymbolManager:
             if query in base or query in symbol:
                 results.append(symbol_info)
                 
-                if len(results) >= 10:
+                if len(results) >= 15:  # Increased limit
                     break
         
         return results
 
 def render_simple_add_symbol(current_symbols: List[str]) -> List[str]:
     """
-    Simple symbol add interface with auto-save
+    Simple symbol add interface with Spot/Future support
     Returns updated symbol list
     """
     
@@ -68,7 +86,7 @@ def render_simple_add_symbol(current_symbols: List[str]) -> List[str]:
     
     # Search box
     search_query = st.text_input(
-        "🔍 Add Symbol",
+        "🔍 Add Symbol (Spot/Future)",
         value=st.session_state.search_query,
         placeholder="Type symbol (e.g., BTC, ETH, KAI...)",
         key="search_input",
@@ -93,13 +111,18 @@ def render_simple_add_symbol(current_symbols: List[str]) -> List[str]:
             for result in results:
                 symbol = result['symbol']
                 base = result['baseAsset']
+                symbol_type = result['type']
                 
-                col1, col2 = st.columns([4, 1])
+                col1, col2, col3 = st.columns([3, 1, 1])
                 
                 with col1:
-                    st.markdown(f"**{symbol}** ({base}/USDT)")
+                    type_emoji = "📊" if symbol_type == "SPOT" else "📈"
+                    st.markdown(f"{type_emoji} **{symbol}** ({base})")
                 
                 with col2:
+                    st.markdown(f"*{symbol_type}*")
+                
+                with col3:
                     if symbol not in current_symbols:
                         if st.button("➕", key=f"add_{symbol}", use_container_width=True):
                             current_symbols.append(symbol)
@@ -111,7 +134,7 @@ def render_simple_add_symbol(current_symbols: List[str]) -> List[str]:
                                     st.session_state.user['id'], 
                                     current_symbols
                                 )
-                                print(f"✅ Symbols auto-saved for user {st.session_state.user['username']}")
+                                print(f"✅ Symbols auto-saved")
                             
                             # Clear search and hide suggestions
                             st.session_state.search_query = ""
