@@ -3,18 +3,8 @@ import time
 import requests
 
 def get_ticker_realtime_sidebar(symbol):
-    """Get real-time price for sidebar (supports both Spot and Future)"""
-    # Check if it's a Future symbol (ends with PERP or contains PERP)
-    is_future = 'PERP' in symbol.upper()
-    
     try:
-        if is_future:
-            # Future API
-            url = "https://fapi.binance.com/fapi/v1/ticker/24hr"
-        else:
-            # Spot API
-            url = "https://api.binance.com/api/v3/ticker/24hr"
-        
+        url = "https://api.binance.com/api/v3/ticker/24hr"
         response = requests.get(url, params={'symbol': symbol}, timeout=5)
         data = response.json()
         
@@ -84,7 +74,7 @@ def render_sidebar(symbols):
     .sidebar-title {
         color: #ffffff;
         font-weight: bold;
-        font-size: 16px;
+        font-size: 18px;
     }
     
     .sidebar-item {
@@ -101,17 +91,17 @@ def render_sidebar(symbols):
     .sidebar-symbol {
         color: #ffffff;
         font-weight: 600;
-        font-size: 14px;
+        font-size: 16px;
         margin-bottom: 4px;
     }
     
     .sidebar-price {
-        font-size: 13px;
+        font-size: 15px;
         font-weight: 500;
     }
     
     .sidebar-change {
-        font-size: 11px;
+        font-size: 13px;
         margin-top: 2px;
     }
     
@@ -123,13 +113,18 @@ def render_sidebar(symbols):
         color: #e74c3c;
     }
     
-    .toggle-btn {
+    .toggle-btn-small {
         background: none;
         border: none;
-        color: #ffffff;
+        color: #7f8c8d;
         cursor: pointer;
-        font-size: 20px;
-        padding: 5px 10px;
+        font-size: 14px;
+        padding: 2px 5px;
+        transition: color 0.2s;
+    }
+    
+    .toggle-btn-small:hover {
+        color: #ffffff;
     }
     
     .main-content-shifted {
@@ -146,17 +141,18 @@ def render_sidebar(symbols):
     
     # Sidebar container
     with st.sidebar:
-        # Toggle button
-        col1, col2 = st.columns([4, 1])
+        # Header with small toggle
+        col1, col2 = st.columns([5, 1])
         
         with col1:
             if st.session_state.sidebar_expanded:
-                st.markdown("### 📊 Symbols")
+                st.markdown('<div class="sidebar-title">📊 Symbols</div>', unsafe_allow_html=True)
         
         with col2:
             if st.button("◀" if st.session_state.sidebar_expanded else "▶", 
                         key="toggle_sidebar",
-                        help="Collapse/Expand"):
+                        help="Collapse/Expand",
+                        type="secondary"):
                 st.session_state.sidebar_expanded = not st.session_state.sidebar_expanded
                 st.rerun()
         
@@ -180,13 +176,9 @@ def render_sidebar(symbols):
                             
                             formatted_price = format_price_sidebar(price)
                             
-                            # Symbol type indicator
-                            is_future = 'PERP' in symbol.upper()
-                            type_emoji = "📈" if is_future else "📊"
-                            
                             st.markdown(f"""
                             <div class="sidebar-item">
-                                <div class="sidebar-symbol">{type_emoji} {symbol}</div>
+                                <div class="sidebar-symbol">{symbol}</div>
                                 <div class="sidebar-price {'price-up' if is_up else 'price-down'}">
                                     {formatted_price}
                                 </div>
@@ -199,15 +191,11 @@ def render_sidebar(symbols):
                             st.markdown(f"""
                             <div class="sidebar-item">
                                 <div class="sidebar-symbol">{symbol}</div>
-                                <div style="color: #7f8c8d; font-size: 12px;">Loading...</div>
+                                <div style="color: #7f8c8d; font-size: 13px;">Loading...</div>
                             </div>
                             """, unsafe_allow_html=True)
                 
                 render_symbol_list()
         else:
-            # Collapsed view - show only emoji indicators
-            st.markdown("**📊**")
-            for symbol in symbols:
-                is_future = 'PERP' in symbol.upper()
-                emoji = "📈" if is_future else "📊"
-                st.markdown(emoji)
+            # Collapsed view - show count only
+            st.markdown(f"**{len(symbols)}**")
