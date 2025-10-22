@@ -25,7 +25,7 @@ from auth_pages import render_login_page, render_signup_page, render_user_menu
 from database_postgres import Database
 from admin_panel import render_admin_login, render_admin_panel
 from session_manager import SessionManager
-# from sidebar import render_sidebar  # THÊM IMPORT
+from sidebar import render_sidebar  # THÊM IMPORT
 
 # Apply custom CSS
 st.markdown(get_custom_css(), unsafe_allow_html=True)
@@ -199,7 +199,7 @@ render_user_menu()
 # ============================================
 # RENDER SIDEBAR (BEFORE MAIN CONTENT)
 # ============================================
-# render_sidebar(st.session_state.SYMBOLS)
+render_sidebar(st.session_state.SYMBOLS)
 
 # ============================================
 # BEAUTIFUL HEADER

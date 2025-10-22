@@ -39,7 +39,7 @@ def render_sidebar(symbols):
     if 'sidebar_expanded' not in st.session_state:
         st.session_state.sidebar_expanded = True
     
-    # Custom CSS for sidebar
+    # Custom CSS for sidebar (giữ nguyên)
     st.markdown("""
     <style>
     .sidebar-container {
@@ -139,63 +139,62 @@ def render_sidebar(symbols):
     </style>
     """, unsafe_allow_html=True)
     
-    # Sidebar container
-    with st.sidebar:
-        # Header with small toggle
-        col1, col2 = st.columns([5, 1])
-        
-        with col1:
-            if st.session_state.sidebar_expanded:
-                st.markdown('<div class="sidebar-title">📊 Symbols</div>', unsafe_allow_html=True)
-        
-        with col2:
-            if st.button("◀" if st.session_state.sidebar_expanded else "▶", 
-                        key="toggle_sidebar",
-                        help="Collapse/Expand",
-                        type="secondary"):
-                st.session_state.sidebar_expanded = not st.session_state.sidebar_expanded
-                st.rerun()
-        
-        st.markdown("---")
-        
-        # Show symbols only if expanded
+    # THAY ĐỔI Ở ĐÂY: Dùng st.sidebar trực tiếp thay vì with context
+    # Header with small toggle
+    col1, col2 = st.sidebar.columns([5, 1])
+    
+    with col1:
         if st.session_state.sidebar_expanded:
-            if not symbols:
-                st.info("No symbols added yet")
-            else:
-                # Auto-refresh price display
-                @st.fragment(run_every="1s")
-                def render_symbol_list():
-                    for symbol in symbols:
-                        ticker_data = get_ticker_realtime_sidebar(symbol)
-                        
-                        if ticker_data:
-                            price = ticker_data['price']
-                            change_pct = ticker_data['change_percent']
-                            is_up = change_pct >= 0
-                            
-                            formatted_price = format_price_sidebar(price)
-                            
-                            st.markdown(f"""
-                            <div class="sidebar-item">
-                                <div class="sidebar-symbol">{symbol}</div>
-                                <div class="sidebar-price {'price-up' if is_up else 'price-down'}">
-                                    {formatted_price}
-                                </div>
-                                <div class="sidebar-change {'price-up' if is_up else 'price-down'}">
-                                    {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
-                                </div>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        else:
-                            st.markdown(f"""
-                            <div class="sidebar-item">
-                                <div class="sidebar-symbol">{symbol}</div>
-                                <div style="color: #7f8c8d; font-size: 13px;">Loading...</div>
-                            </div>
-                            """, unsafe_allow_html=True)
-                
-                render_symbol_list()
+            st.sidebar.markdown('<div class="sidebar-title">📊 Symbols</div>', unsafe_allow_html=True)
+    
+    with col2:
+        if st.sidebar.button("◀" if st.session_state.sidebar_expanded else "▶", 
+                    key="toggle_sidebar",
+                    help="Collapse/Expand",
+                    type="secondary"):
+            st.session_state.sidebar_expanded = not st.session_state.sidebar_expanded
+            st.rerun()
+    
+    st.sidebar.markdown("---")
+    
+    # Show symbols only if expanded
+    if st.session_state.sidebar_expanded:
+        if not symbols:
+            st.sidebar.info("No symbols added yet")
         else:
-            # Collapsed view - show count only
-            st.markdown(f"**{len(symbols)}**")
+            # Auto-refresh price display
+            @st.fragment(run_every="1s")
+            def render_symbol_list():
+                for symbol in symbols:
+                    ticker_data = get_ticker_realtime_sidebar(symbol)
+                    
+                    if ticker_data:
+                        price = ticker_data['price']
+                        change_pct = ticker_data['change_percent']
+                        is_up = change_pct >= 0
+                        
+                        formatted_price = format_price_sidebar(price)
+                        
+                        st.sidebar.markdown(f"""
+                        <div class="sidebar-item">
+                            <div class="sidebar-symbol">{symbol}</div>
+                            <div class="sidebar-price {'price-up' if is_up else 'price-down'}">
+                                {formatted_price}
+                            </div>
+                            <div class="sidebar-change {'price-up' if is_up else 'price-down'}">
+                                {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.sidebar.markdown(f"""
+                        <div class="sidebar-item">
+                            <div class="sidebar-symbol">{symbol}</div>
+                            <div style="color: #7f8c8d; font-size: 13px;">Loading...</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+            
+            render_symbol_list()
+    else:
+        # Collapsed view - show count only
+        st.sidebar.markdown(f"**{len(symbols)}**")
