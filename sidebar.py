@@ -31,61 +31,52 @@ def format_price_sidebar(price):
 
 def render_sidebar(symbols):
     """
-    Render collapsible sidebar with symbol list
-    Shows real-time prices without box styling
+    Render sidebar with symbol list - Real-time updates without refresh
+    Uses Streamlit's native sidebar
     """
     
-    # Initialize sidebar state
-    if 'sidebar_expanded' not in st.session_state:
-        st.session_state.sidebar_expanded = True
-    
-    # Custom CSS for sidebar
+    # Custom CSS for sidebar styling
     st.markdown("""
     <style>
-    .sidebar-container {
-        position: fixed;
-        left: 0;
-        top: 80px;
-        height: calc(100vh - 80px);
+    /* Sidebar styling */
+    [data-testid="stSidebar"] {
         background-color: #1e1e1e;
-        border-right: 1px solid #3d3d3d;
-        transition: all 0.3s ease;
-        z-index: 999;
-        overflow-y: auto;
     }
     
-    .sidebar-expanded {
-        width: 250px;
-    }
-    
-    .sidebar-collapsed {
-        width: 50px;
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
+        color: #ffffff;
     }
     
     .sidebar-header {
-        padding: 15px;
-        background-color: #2d2d2d;
+        padding: 10px 0;
+        margin-bottom: 15px;
         border-bottom: 1px solid #3d3d3d;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
     }
     
     .sidebar-title {
         color: #ffffff;
         font-weight: bold;
-        font-size: 18px;
+        font-size: 20px;
+        margin-bottom: 5px;
+    }
+    
+    .sidebar-subtitle {
+        color: #7f8c8d;
+        font-size: 14px;
     }
     
     .sidebar-item {
-        padding: 12px 15px;
-        border-bottom: 1px solid #2d2d2d;
-        cursor: pointer;
-        transition: background-color 0.2s;
+        padding: 12px;
+        margin-bottom: 8px;
+        background-color: #2d2d2d;
+        border-radius: 8px;
+        border: 1px solid #3d3d3d;
+        transition: all 0.2s;
     }
     
     .sidebar-item:hover {
-        background-color: #2d2d2d;
+        background-color: #353535;
+        border-color: #4d4d4d;
     }
     
     .sidebar-symbol {
@@ -98,11 +89,11 @@ def render_sidebar(symbols):
     .sidebar-price {
         font-size: 15px;
         font-weight: 500;
+        margin-bottom: 2px;
     }
     
     .sidebar-change {
         font-size: 13px;
-        margin-top: 2px;
     }
     
     .price-up {
@@ -113,89 +104,73 @@ def render_sidebar(symbols):
         color: #e74c3c;
     }
     
-    .toggle-btn-small {
-        background: none;
-        border: none;
+    .sidebar-loading {
         color: #7f8c8d;
-        cursor: pointer;
-        font-size: 14px;
-        padding: 2px 5px;
-        transition: color 0.2s;
-    }
-    
-    .toggle-btn-small:hover {
-        color: #ffffff;
-    }
-    
-    .main-content-shifted {
-        margin-left: 250px;
-        transition: margin-left 0.3s ease;
-    }
-    
-    .main-content-normal {
-        margin-left: 50px;
-        transition: margin-left 0.3s ease;
+        font-size: 13px;
+        font-style: italic;
     }
     </style>
     """, unsafe_allow_html=True)
     
-    # Sidebar container
+    # Use Streamlit's native sidebar
     with st.sidebar:
-        # Header with small toggle
-        col1, col2 = st.columns([5, 1])
+        # Header
+        st.markdown("""
+        <div class="sidebar-header">
+            <div class="sidebar-title">📊 Symbols</div>
+            <div class="sidebar-subtitle">Real-time prices</div>
+        </div>
+        """, unsafe_allow_html=True)
         
-        with col1:
-            if st.session_state.sidebar_expanded:
-                st.markdown('<div class="sidebar-title">📊 Symbols</div>', unsafe_allow_html=True)
-        
-        with col2:
-            if st.button("◀" if st.session_state.sidebar_expanded else "▶", 
-                        key="toggle_sidebar",
-                        help="Collapse/Expand",
-                        type="secondary"):
-                st.session_state.sidebar_expanded = not st.session_state.sidebar_expanded
-                st.rerun()
-        
-        st.markdown("---")
-        
-        # Show symbols only if expanded
-        if st.session_state.sidebar_expanded:
-            if not symbols:
-                st.info("No symbols added yet")
-            else:
-                # Auto-refresh price display
-                @st.fragment(run_every="1s")
-                def render_symbol_list():
-                    for symbol in symbols:
-                        ticker_data = get_ticker_realtime_sidebar(symbol)
-                        
-                        if ticker_data:
-                            price = ticker_data['price']
-                            change_pct = ticker_data['change_percent']
-                            is_up = change_pct >= 0
-                            
-                            formatted_price = format_price_sidebar(price)
-                            
-                            st.markdown(f"""
-                            <div class="sidebar-item">
-                                <div class="sidebar-symbol">{symbol}</div>
-                                <div class="sidebar-price {'price-up' if is_up else 'price-down'}">
-                                    {formatted_price}
-                                </div>
-                                <div class="sidebar-change {'price-up' if is_up else 'price-down'}">
-                                    {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
-                                </div>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        else:
-                            st.markdown(f"""
-                            <div class="sidebar-item">
-                                <div class="sidebar-symbol">{symbol}</div>
-                                <div style="color: #7f8c8d; font-size: 13px;">Loading...</div>
-                            </div>
-                            """, unsafe_allow_html=True)
-                
-                render_symbol_list()
+        if not symbols:
+            st.info("No symbols added yet")
         else:
-            # Collapsed view - show count only
-            st.markdown(f"**{len(symbols)}**")
+            # Create placeholder for each symbol
+            symbol_placeholders = {}
+            for symbol in symbols:
+                symbol_placeholders[symbol] = st.empty()
+            
+            # Real-time update function (runs in fragment)
+            @st.fragment(run_every="1s")
+            def update_prices():
+                for symbol in symbols:
+                    ticker_data = get_ticker_realtime_sidebar(symbol)
+                    
+                    if ticker_data:
+                        price = ticker_data['price']
+                        change_pct = ticker_data['change_percent']
+                        is_up = change_pct >= 0
+                        
+                        formatted_price = format_price_sidebar(price)
+                        
+                        # Update placeholder with new data
+                        symbol_placeholders[symbol].markdown(f"""
+                        <div class="sidebar-item">
+                            <div class="sidebar-symbol">{symbol}</div>
+                            <div class="sidebar-price {'price-up' if is_up else 'price-down'}">
+                                {formatted_price}
+                            </div>
+                            <div class="sidebar-change {'price-up' if is_up else 'price-down'}">
+                                {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        symbol_placeholders[symbol].markdown(f"""
+                        <div class="sidebar-item">
+                            <div class="sidebar-symbol">{symbol}</div>
+                            <div class="sidebar-loading">Loading...</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+            
+            # Run real-time updates
+            update_prices()
+        
+        # Footer info
+        st.markdown("---")
+        st.markdown(f"""
+        <div style="text-align: center; color: #7f8c8d; font-size: 12px;">
+            Total: {len(symbols)} symbols<br>
+            Updates every 1s
+        </div>
+        """, unsafe_allow_html=True)
