@@ -1,5 +1,21 @@
+# sidebar.py
 import streamlit as st
 import time
+import requests
+
+def get_ticker_realtime_sidebar(symbol):
+    try:
+        url = "https://api.binance.com/api/v3/ticker/24hr"
+        response = requests.get(url, params={'symbol': symbol}, timeout=5)
+        data = response.json()
+        
+        return {
+            'price': float(data['lastPrice']),
+            'change_percent': float(data['priceChangePercent']),
+            'timestamp': time.time()
+        }
+    except:
+        return None
 
 def format_price_sidebar(price):
     """Format price for sidebar display"""
@@ -16,13 +32,14 @@ def format_price_sidebar(price):
 
 def render_sidebar(symbols):
     """
-    Render sidebar with real-time prices
-    Prices auto-update via fragment WITHOUT refreshing entire sidebar
+    Render Streamlit native sidebar with symbol list
+    Shows real-time prices with clean styling
     """
     
-    # Custom CSS
+    # Custom CSS for sidebar styling (works with native sidebar)
     st.markdown("""
     <style>
+    /* Sidebar styling */
     [data-testid="stSidebar"] {
         background-color: #1e1e1e;
     }
@@ -31,43 +48,32 @@ def render_sidebar(symbols):
         color: #ffffff;
     }
     
-    .sidebar-header {
-        padding: 10px 0;
-        margin-bottom: 15px;
-        border-bottom: 1px solid #3d3d3d;
-    }
-    
-    .sidebar-title {
-        color: #ffffff;
-        font-weight: bold;
-        font-size: 20px;
-        margin-bottom: 5px;
-    }
-    
-    .sidebar-subtitle {
-        color: #7f8c8d;
-        font-size: 14px;
-    }
-    
-    .sidebar-item {
-        padding: 12px;
-        margin-bottom: 8px;
+    /* Symbol card styling */
+    .sidebar-symbol-card {
         background-color: #2d2d2d;
+        padding: 12px;
         border-radius: 8px;
+        margin-bottom: 10px;
         border: 1px solid #3d3d3d;
+        transition: all 0.2s ease;
     }
     
-    .sidebar-symbol {
+    .sidebar-symbol-card:hover {
+        background-color: #353535;
+        border-color: #4d4d4d;
+    }
+    
+    .sidebar-symbol-name {
         color: #ffffff;
         font-weight: 600;
         font-size: 16px;
-        margin-bottom: 4px;
+        margin-bottom: 6px;
     }
     
     .sidebar-price {
         font-size: 15px;
         font-weight: 500;
-        margin-bottom: 2px;
+        margin-bottom: 4px;
     }
     
     .sidebar-change {
@@ -82,74 +88,71 @@ def render_sidebar(symbols):
         color: #e74c3c;
     }
     
-    .sidebar-loading {
-        color: #7f8c8d;
-        font-size: 13px;
-        font-style: italic;
+    /* Divider styling */
+    [data-testid="stSidebar"] hr {
+        margin: 15px 0;
+        border-color: #3d3d3d;
     }
     </style>
     """, unsafe_allow_html=True)
     
+    # Use native Streamlit sidebar
     with st.sidebar:
-        # Static header (renders once)
-        st.markdown("""
-        <div class="sidebar-header">
-            <div class="sidebar-title">📊 Symbols</div>
-            <div class="sidebar-subtitle">Live prices</div>
-        </div>
-        """, unsafe_allow_html=True)
+        # Header
+        st.markdown("## 📊 Symbols")
         
+        # Info about collapse
+        st.caption("💡 Use the arrow (◀) at top-left to collapse sidebar")
+        
+        st.markdown("---")
+        
+        # Check if symbols exist
         if not symbols:
             st.info("No symbols added yet")
-        else:
-            # Create container for dynamic content
-            prices_container = st.container()
-            
-            # Fragment updates ONLY the prices container
-            @st.fragment(run_every="1s")
-            def update_prices():
-                ws_handler = st.session_state.get('ws_handler')
-                
-                if not ws_handler:
-                    prices_container.warning("⚠️ WebSocket not connected")
-                    return
-                
-                with prices_container:
-                    for symbol in symbols:
-                        ticker_data = ws_handler.get_price(symbol)
-                        
-                        if ticker_data and (time.time() - ticker_data['timestamp']) < 5:
-                            price = ticker_data['price']
-                            change_pct = ticker_data['change_percent']
-                            is_up = change_pct >= 0
-                            formatted_price = format_price_sidebar(price)
-                            
-                            st.markdown(f"""
-                            <div class="sidebar-item">
-                                <div class="sidebar-symbol">{symbol}</div>
-                                <div class="sidebar-price {'price-up' if is_up else 'price-down'}">
-                                    {formatted_price}
-                                </div>
-                                <div class="sidebar-change {'price-up' if is_up else 'price-down'}">
-                                    {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
-                                </div>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        else:
-                            st.markdown(f"""
-                            <div class="sidebar-item">
-                                <div class="sidebar-symbol">{symbol}</div>
-                                <div class="sidebar-loading">Connecting...</div>
-                            </div>
-                            """, unsafe_allow_html=True)
-            
-            # Run the fragment
-            update_prices()
+            return
         
-        # Static footer
+        # Symbol count
+        st.markdown(f"**Tracking {len(symbols)} symbols**")
+        
         st.markdown("---")
-        st.markdown(f"""
-        <div style="text-align: center; color: #7f8c8d; font-size: 12px;">
-            Total: {len(symbols)} symbols
-        </div>
-        """, unsafe_allow_html=True)
+        
+        # Auto-refresh price display using fragment
+        @st.fragment(run_every="1s")
+        def render_symbol_list():
+            for idx, symbol in enumerate(symbols):
+                ticker_data = get_ticker_realtime_sidebar(symbol)
+                
+                if ticker_data:
+                    price = ticker_data['price']
+                    change_pct = ticker_data['change_percent']
+                    is_up = change_pct >= 0
+                    
+                    formatted_price = format_price_sidebar(price)
+                    
+                    # Render symbol card
+                    st.markdown(f"""
+                    <div class="sidebar-symbol-card">
+                        <div class="sidebar-symbol-name">{symbol}</div>
+                        <div class="sidebar-price {'price-up' if is_up else 'price-down'}">
+                            {formatted_price}
+                        </div>
+                        <div class="sidebar-change {'price-up' if is_up else 'price-down'}">
+                            {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    # Loading state
+                    st.markdown(f"""
+                    <div class="sidebar-symbol-card">
+                        <div class="sidebar-symbol-name">{symbol}</div>
+                        <div style="color: #7f8c8d; font-size: 13px;">Loading...</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+        
+        # Render the list
+        render_symbol_list()
+        
+        # Footer
+        st.markdown("---")
+        st.caption("🔄 Auto-refresh: 1 second")
