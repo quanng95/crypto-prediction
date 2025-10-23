@@ -16,14 +16,13 @@ def format_price_sidebar(price):
 
 def render_sidebar(symbols):
     """
-    Render sidebar with real-time prices from WebSocket
-    NO auto-refresh, prices update from background WebSocket
+    Render sidebar with real-time prices
+    Prices auto-update via fragment WITHOUT refreshing entire sidebar
     """
     
-    # Custom CSS for sidebar styling ONLY
+    # Custom CSS
     st.markdown("""
     <style>
-    /* Sidebar background */
     [data-testid="stSidebar"] {
         background-color: #1e1e1e;
     }
@@ -32,7 +31,6 @@ def render_sidebar(symbols):
         color: #ffffff;
     }
     
-    /* Header styling */
     .sidebar-header {
         padding: 10px 0;
         margin-bottom: 15px;
@@ -51,19 +49,12 @@ def render_sidebar(symbols):
         font-size: 14px;
     }
     
-    /* Symbol item styling */
     .sidebar-item {
         padding: 12px;
         margin-bottom: 8px;
         background-color: #2d2d2d;
         border-radius: 8px;
         border: 1px solid #3d3d3d;
-        transition: all 0.2s;
-    }
-    
-    .sidebar-item:hover {
-        background-color: #353535;
-        border-color: #4d4d4d;
     }
     
     .sidebar-symbol {
@@ -96,90 +87,69 @@ def render_sidebar(symbols):
         font-size: 13px;
         font-style: italic;
     }
-    
-    /* Refresh button styling */
-    .stButton > button {
-        width: 100%;
-        background-color: #2d2d2d;
-        color: #ffffff;
-        border: 1px solid #3d3d3d;
-        transition: all 0.2s;
-    }
-    
-    .stButton > button:hover {
-        background-color: #353535;
-        border-color: #4d4d4d;
-    }
     </style>
     """, unsafe_allow_html=True)
     
-    # Use Streamlit's NATIVE sidebar (collapsible by default)
     with st.sidebar:
-        # Header
+        # Static header (renders once)
         st.markdown("""
         <div class="sidebar-header">
             <div class="sidebar-title">📊 Symbols</div>
-            <div class="sidebar-subtitle">Live via WebSocket</div>
+            <div class="sidebar-subtitle">Live prices</div>
         </div>
         """, unsafe_allow_html=True)
         
         if not symbols:
             st.info("No symbols added yet")
         else:
-            # Get WebSocket handler
-            ws_handler = st.session_state.get('ws_handler')
+            # Create container for dynamic content
+            prices_container = st.container()
             
-            if not ws_handler:
-                st.warning("⚠️ WebSocket not connected")
-            else:
-                # Render each symbol with WebSocket data
-                for symbol in symbols:
-                    # Get price from WebSocket (already real-time in background)
-                    ticker_data = ws_handler.get_price(symbol)
-                    
-                    if ticker_data and (time.time() - ticker_data['timestamp']) < 5:
-                        price = ticker_data['price']
-                        change_pct = ticker_data['change_percent']
-                        is_up = change_pct >= 0
+            # Fragment updates ONLY the prices container
+            @st.fragment(run_every="1s")
+            def update_prices():
+                ws_handler = st.session_state.get('ws_handler')
+                
+                if not ws_handler:
+                    prices_container.warning("⚠️ WebSocket not connected")
+                    return
+                
+                with prices_container:
+                    for symbol in symbols:
+                        ticker_data = ws_handler.get_price(symbol)
                         
-                        formatted_price = format_price_sidebar(price)
-                        
-                        # Display symbol card
-                        st.markdown(f"""
-                        <div class="sidebar-item">
-                            <div class="sidebar-symbol">{symbol}</div>
-                            <div class="sidebar-price {'price-up' if is_up else 'price-down'}">
-                                {formatted_price}
+                        if ticker_data and (time.time() - ticker_data['timestamp']) < 5:
+                            price = ticker_data['price']
+                            change_pct = ticker_data['change_percent']
+                            is_up = change_pct >= 0
+                            formatted_price = format_price_sidebar(price)
+                            
+                            st.markdown(f"""
+                            <div class="sidebar-item">
+                                <div class="sidebar-symbol">{symbol}</div>
+                                <div class="sidebar-price {'price-up' if is_up else 'price-down'}">
+                                    {formatted_price}
+                                </div>
+                                <div class="sidebar-change {'price-up' if is_up else 'price-down'}">
+                                    {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
+                                </div>
                             </div>
-                            <div class="sidebar-change {'price-up' if is_up else 'price-down'}">
-                                {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"""
+                            <div class="sidebar-item">
+                                <div class="sidebar-symbol">{symbol}</div>
+                                <div class="sidebar-loading">Connecting...</div>
                             </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Optional: Chart button for each symbol
-                        if st.button("📊", key=f"sidebar_chart_{symbol}", help=f"View {symbol} chart"):
-                            st.session_state.show_chart = True
-                            st.session_state.chart_symbol = symbol
-                            st.rerun()
-                    else:
-                        st.markdown(f"""
-                        <div class="sidebar-item">
-                            <div class="sidebar-symbol">{symbol}</div>
-                            <div class="sidebar-loading">Connecting...</div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                            """, unsafe_allow_html=True)
+            
+            # Run the fragment
+            update_prices()
         
-        # Footer with manual refresh button
+        # Static footer
         st.markdown("---")
-        
-        # Manual refresh button (optional)
-        if st.button("🔄 Refresh Prices", use_container_width=True):
-            st.rerun()
-        
         st.markdown(f"""
-        <div style="text-align: center; color: #7f8c8d; font-size: 12px; margin-top: 10px;">
-            Total: {len(symbols)} symbols<br>
-            Live via WebSocket
+        <div style="text-align: center; color: #7f8c8d; font-size: 12px;">
+            Total: {len(symbols)} symbols
         </div>
         """, unsafe_allow_html=True)
