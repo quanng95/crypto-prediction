@@ -103,9 +103,7 @@ def render_sidebar(symbols):
     # Use native Streamlit sidebar
     with st.sidebar:
         # Header
-        st.markdown("## 📊 Symbols")
-        
-        st.caption("💡 Use the arrow (◀) at top-left to collapse")
+        st.markdown("### 📊 Symbols")
         
         st.markdown("---")
         
@@ -156,6 +154,4 @@ def render_sidebar(symbols):
         # Render the list
         render_symbol_list()
         
-        # Footer
-        st.markdown("---")
-        st.caption("🔄 Real-time update")
+
