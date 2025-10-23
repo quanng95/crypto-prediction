@@ -56,6 +56,12 @@ def render_sidebar(symbols):
         color: #ffffff;
     }
     
+    /* Header styling - GIẢM SIZE */
+    [data-testid="stSidebar"] h2 {
+        font-size: 18px !important;  /* Giảm từ 24px xuống 18px */
+        margin-bottom: 10px !important;
+    }
+                
     /* Symbol item - no box, just text */
     .sidebar-symbol-item {
         padding: 8px 0;
@@ -112,10 +118,10 @@ def render_sidebar(symbols):
             st.info("No symbols added yet")
             return
         
-        # Symbol count
-        st.markdown(f"**Tracking {len(symbols)} symbols**")
+        # # Symbol count
+        # st.markdown(f"**Tracking {len(symbols)} symbols**")
         
-        st.markdown("---")
+        # st.markdown("---")
         
         # Real-time price display with fragment (auto-refresh like ticker carousel)
         @st.fragment(run_every="0.5s")
