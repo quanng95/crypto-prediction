@@ -4,6 +4,14 @@ import time
 import requests
 
 def get_ticker_realtime_sidebar(symbol):
+    """Get real-time ticker from WebSocket handler"""
+    # Try to get from WebSocket first (same as ticker carousel)
+    if 'ws_handler' in st.session_state:
+        data = st.session_state.ws_handler.get_price(symbol)
+        if data and (time.time() - data['timestamp']) < 5:
+            return data
+    
+    # Fallback to REST API
     try:
         url = "https://api.binance.com/api/v3/ticker/24hr"
         response = requests.get(url, params={'symbol': symbol}, timeout=5)
@@ -33,13 +41,13 @@ def format_price_sidebar(price):
 def render_sidebar(symbols):
     """
     Render Streamlit native sidebar with symbol list
-    Shows real-time prices with clean styling
+    Real-time prices without boxes, clean text format
     """
     
-    # Custom CSS for sidebar styling (works with native sidebar)
+    # Custom CSS for sidebar styling
     st.markdown("""
     <style>
-    /* Sidebar styling */
+    /* Sidebar background */
     [data-testid="stSidebar"] {
         background-color: #1e1e1e;
     }
@@ -48,36 +56,27 @@ def render_sidebar(symbols):
         color: #ffffff;
     }
     
-    /* Symbol card styling */
-    .sidebar-symbol-card {
-        background-color: #2d2d2d;
-        padding: 12px;
-        border-radius: 8px;
-        margin-bottom: 10px;
-        border: 1px solid #3d3d3d;
-        transition: all 0.2s ease;
-    }
-    
-    .sidebar-symbol-card:hover {
-        background-color: #353535;
-        border-color: #4d4d4d;
+    /* Symbol item - no box, just text */
+    .sidebar-symbol-item {
+        padding: 8px 0;
+        border-bottom: 1px solid #2d2d2d;
     }
     
     .sidebar-symbol-name {
         color: #ffffff;
         font-weight: 600;
-        font-size: 16px;
-        margin-bottom: 6px;
-    }
-    
-    .sidebar-price {
         font-size: 15px;
-        font-weight: 500;
         margin-bottom: 4px;
     }
     
+    .sidebar-price {
+        font-size: 14px;
+        font-weight: 500;
+        margin-bottom: 2px;
+    }
+    
     .sidebar-change {
-        font-size: 13px;
+        font-size: 12px;
     }
     
     .price-up {
@@ -93,6 +92,11 @@ def render_sidebar(symbols):
         margin: 15px 0;
         border-color: #3d3d3d;
     }
+    
+    /* Remove extra spacing */
+    [data-testid="stSidebar"] .element-container {
+        margin-bottom: 0;
+    }
     </style>
     """, unsafe_allow_html=True)
     
@@ -101,8 +105,7 @@ def render_sidebar(symbols):
         # Header
         st.markdown("## 📊 Symbols")
         
-        # Info about collapse
-        st.caption("💡 Use the arrow (◀) at top-left to collapse sidebar")
+        st.caption("💡 Use the arrow (◀) at top-left to collapse")
         
         st.markdown("---")
         
@@ -116,10 +119,10 @@ def render_sidebar(symbols):
         
         st.markdown("---")
         
-        # Auto-refresh price display using fragment
-        @st.fragment(run_every="1s")
+        # Real-time price display with fragment (auto-refresh like ticker carousel)
+        @st.fragment(run_every="0.5s")
         def render_symbol_list():
-            for idx, symbol in enumerate(symbols):
+            for symbol in symbols:
                 ticker_data = get_ticker_realtime_sidebar(symbol)
                 
                 if ticker_data:
@@ -129,9 +132,9 @@ def render_sidebar(symbols):
                     
                     formatted_price = format_price_sidebar(price)
                     
-                    # Render symbol card
+                    # Render symbol item - simple text format, no box
                     st.markdown(f"""
-                    <div class="sidebar-symbol-card">
+                    <div class="sidebar-symbol-item">
                         <div class="sidebar-symbol-name">{symbol}</div>
                         <div class="sidebar-price {'price-up' if is_up else 'price-down'}">
                             {formatted_price}
@@ -144,9 +147,9 @@ def render_sidebar(symbols):
                 else:
                     # Loading state
                     st.markdown(f"""
-                    <div class="sidebar-symbol-card">
+                    <div class="sidebar-symbol-item">
                         <div class="sidebar-symbol-name">{symbol}</div>
-                        <div style="color: #7f8c8d; font-size: 13px;">Loading...</div>
+                        <div style="color: #7f8c8d; font-size: 12px;">Loading...</div>
                     </div>
                     """, unsafe_allow_html=True)
         
@@ -155,4 +158,4 @@ def render_sidebar(symbols):
         
         # Footer
         st.markdown("---")
-        st.caption("🔄 Auto-refresh: 1 second")
+        st.caption("🔄 Real-time update")
