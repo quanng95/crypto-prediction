@@ -29,44 +29,10 @@ def format_price_sidebar(price):
     else:
         return f"${price:.8f}".rstrip('0').rstrip('.')
 
-@st.fragment(run_every="1s")
-def render_sidebar_content(symbols, symbol_placeholders):
-    """
-    Fragment function to update prices - MUST be called from main app
-    """
-    for symbol in symbols:
-        ticker_data = get_ticker_realtime_sidebar(symbol)
-        
-        if ticker_data:
-            price = ticker_data['price']
-            change_pct = ticker_data['change_percent']
-            is_up = change_pct >= 0
-            
-            formatted_price = format_price_sidebar(price)
-            
-            # Update placeholder
-            symbol_placeholders[symbol].markdown(f"""
-            <div class="sidebar-item">
-                <div class="sidebar-symbol">{symbol}</div>
-                <div class="sidebar-price {'price-up' if is_up else 'price-down'}">
-                    {formatted_price}
-                </div>
-                <div class="sidebar-change {'price-up' if is_up else 'price-down'}">
-                    {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            symbol_placeholders[symbol].markdown(f"""
-            <div class="sidebar-item">
-                <div class="sidebar-symbol">{symbol}</div>
-                <div class="sidebar-loading">Loading...</div>
-            </div>
-            """, unsafe_allow_html=True)
-
 def render_sidebar(symbols):
     """
     Render sidebar with symbol list - Real-time updates
+    Fragment is called INSIDE with st.sidebar context
     """
     
     # Custom CSS
@@ -145,10 +111,6 @@ def render_sidebar(symbols):
     </style>
     """, unsafe_allow_html=True)
     
-    # Initialize placeholders in session state
-    if 'sidebar_placeholders' not in st.session_state:
-        st.session_state.sidebar_placeholders = {}
-    
     # Use Streamlit's native sidebar
     with st.sidebar:
         # Header
@@ -161,18 +123,44 @@ def render_sidebar(symbols):
         if not symbols:
             st.info("No symbols added yet")
         else:
-            # Create/update placeholders for each symbol
-            current_symbols = set(symbols)
-            existing_symbols = set(st.session_state.sidebar_placeholders.keys())
+            # Create a container for all symbols
+            symbols_container = st.container()
             
-            # Remove old symbols
-            for symbol in existing_symbols - current_symbols:
-                del st.session_state.sidebar_placeholders[symbol]
+            # Fragment function INSIDE sidebar context
+            @st.fragment(run_every="1s")
+            def update_symbol_prices():
+                with symbols_container:
+                    for symbol in symbols:
+                        ticker_data = get_ticker_realtime_sidebar(symbol)
+                        
+                        if ticker_data:
+                            price = ticker_data['price']
+                            change_pct = ticker_data['change_percent']
+                            is_up = change_pct >= 0
+                            
+                            formatted_price = format_price_sidebar(price)
+                            
+                            st.markdown(f"""
+                            <div class="sidebar-item">
+                                <div class="sidebar-symbol">{symbol}</div>
+                                <div class="sidebar-price {'price-up' if is_up else 'price-down'}">
+                                    {formatted_price}
+                                </div>
+                                <div class="sidebar-change {'price-up' if is_up else 'price-down'}">
+                                    {'▲' if is_up else '▼'} {abs(change_pct):.2f}%
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"""
+                            <div class="sidebar-item">
+                                <div class="sidebar-symbol">{symbol}</div>
+                                <div class="sidebar-loading">Loading...</div>
+                            </div>
+                            """, unsafe_allow_html=True)
             
-            # Add new symbols
-            for symbol in symbols:
-                if symbol not in st.session_state.sidebar_placeholders:
-                    st.session_state.sidebar_placeholders[symbol] = st.empty()
+            # Call fragment inside sidebar
+            update_symbol_prices()
         
         # Footer
         st.markdown("---")
@@ -182,7 +170,3 @@ def render_sidebar(symbols):
             Updates every 1s
         </div>
         """, unsafe_allow_html=True)
-    
-    # Call fragment OUTSIDE sidebar context
-    if symbols and st.session_state.sidebar_placeholders:
-        render_sidebar_content(symbols, st.session_state.sidebar_placeholders)
